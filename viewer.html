@@ -82,17 +82,18 @@ function add(name,url,mat){loader.load(url,g=>{g.computeVertexNormals();const m=
   if(name==='jaw')jawMesh=m;g.computeBoundingBox();const b=g.boundingBox;
   document.getElementById('dims').innerHTML+=`${name}: ${(b.max.x-b.min.x).toFixed(0)}×${(b.max.y-b.min.y).toFixed(0)}×${(b.max.z-b.min.z).toFixed(0)} мм<br>`;
   if(name==='body')setView('iso');});}
-add('body','out/mount_body.stl',mats.body);
-add('jaw','out/mount_jaw.stl',mats.jaw);
+const V='?v='+Date.now();
+add('body','out/mount_body.stl'+V,mats.body);
+add('jaw','out/mount_jaw.stl'+V,mats.jaw);
 
 // условная ствольная коробка с полоской (по параметрам модели)
 const RECV=new THREE.Group();
-const rw=34,rh=53,recvTop=46,L=150;
+const rw=34,rh=59,recvTop=50,L=150;
 const box=new THREE.Mesh(new THREE.BoxGeometry(L+60,rw,rh),new THREE.MeshStandardMaterial({color:0x3a6ea5,transparent:true,opacity:0.25}));
 box.position.set(L/2,0,recvTop-rh/2);RECV.add(box);
 const edges=new THREE.LineSegments(new THREE.EdgesGeometry(box.geometry),new THREE.LineBasicMaterial({color:0x7fb2e6}));edges.position.copy(box.position);RECV.add(edges);
 // полоска: трапеция 4.5 по лицу, 2 мм выступ, 45°
-const sh=new THREE.Shape();sh.moveTo(-17,-4.25);sh.lineTo(-19,-2.25);sh.lineTo(-19,2.25);sh.lineTo(-17,4.25);sh.closePath();
+const sh=new THREE.Shape();sh.moveTo(-17,-13);sh.lineTo(-22.5,-7.5);sh.lineTo(-22.5,7.5);sh.lineTo(-17,13);sh.closePath();
 const strip=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:90,bevelEnabled:false}),new THREE.MeshStandardMaterial({color:0x5fa8ff}));
 strip.rotation.y=Math.PI/2;strip.position.set(30,0,0);RECV.add(strip);
 scene.add(RECV);

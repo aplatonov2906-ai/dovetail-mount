@@ -55,9 +55,17 @@ SLOT_W, SLOT_D, PITCH = 5.23, 3.0, 10.01
 TOP_SLOTS = 14
 
 # Боковая планка
-SIDE_X0, SIDE_X1 = 55.0, 140.0
+SIDE_X0, SIDE_X1 = 40.0, 125.0
 SIDE_ZC  = 25.0   # центр боковой планки по Z, мм
 SIDE_HOLE_D = 6.0 # облегчающие отверстия (0 — выключить)
+
+# Внешний вид как у прототипа
+SLOPE_Z0     = 38.0   # где начинается наклонная грань над боковой планкой, мм
+SLOPE_HOLE_D = 6.0    # отверстия в наклонной грани, глухие (0 — выключить)
+SLOPE_HOLE_DEPTH = 6.0
+SLOPE_HOLES  = 11
+FRONT_CUT    = 28.0   # косой срез нижней части спереди, мм по X
+LUG_L, LUG_H, LUG_HOLE = 12.0, 10.0, 5.0   # задний упор с отверстием
 
 # ───────── ПРОИЗВОДНЫЕ ─────────
 WALL_IN  = -(RECV_HALF_W + PLATE_BASE)      # внутренняя грань стенки (основание призмы)
@@ -120,12 +128,14 @@ def picatinny(x0, x1, base_z, center_y, n_slots, direction="up"):
 
 
 def build_body():
-    wall = box(0, L, WALL_OUT, WALL_IN, BODY_Z0, PLATE_Z1)
-    plate = box(0, L, WALL_OUT, PLATE_Y1, PLATE_Z0, PLATE_Z1)
-    gusset = yz_prism([(WALL_IN - 0.1, PLATE_Z0 - GUSSET), (WALL_IN - 0.1, PLATE_Z0 + 0.1),
-                       (WALL_IN + GUSSET, PLATE_Z0 + 0.1)], 0, L)
+    # профиль корпуса в YZ: стенка → наклонная грань → верх с планкой → полка над коробкой
+    slope_top = WALL_IN - 1.0   # наклон кончается над стенкой, полка остаётся полной толщины
+    prof = [(WALL_OUT, BODY_Z0), (WALL_OUT, SLOPE_Z0), (slope_top, PLATE_Z1),
+            (PLATE_Y1, PLATE_Z1), (PLATE_Y1, PLATE_Z0), (WALL_IN + GUSSET, PLATE_Z0),
+            (WALL_IN, PLATE_Z0 - GUSSET), (WALL_IN, BODY_Z0)]
+    body = yz_prism(prof, 0, L)
     boss = box(JAW_X0, JAW_X1, BOSS_Y, WALL_OUT + 0.1, BODY_Z0, BOSS_TOP)
-    body = wall.union(plate).union(gusset).union(boss)
+    body = body.union(boss)
 
     top_rail, _ = picatinny(0, L, PLATE_Z1 - 0.01, 0.0, TOP_SLOTS, "up")
     body = body.union(top_rail)
@@ -134,8 +144,34 @@ def build_body():
     side_rail, s0 = picatinny(SIDE_X0, SIDE_X1, WALL_OUT + 0.01, SIDE_ZC, n_side, "left")
     body = body.union(side_rail)
 
+    # задний упор с отверстием (не доходит до коробки: заподлицо с дном паза)
+    lug = box(0, LUG_L, WALL_OUT, WALL_IN - DT_DEPTH - DT_CLEAR - 1.0, BODY_Z0 - LUG_H, BODY_Z0 + 0.1)
+    lug_hole = (cq.Workplane("XZ", origin=(LUG_L / 2, 0, BODY_Z0 - LUG_H / 2))
+                .circle(LUG_HOLE / 2).extrude(60, both=True))
+    body = body.union(lug).cut(lug_hole)
+
+    # косой срез нижней части спереди (верхняя планка остаётся во всю длину)
+    cut = (cq.Workplane("XZ", origin=(0, 0, 0))
+           .polyline([(L - FRONT_CUT, BODY_Z0 - LUG_H - 1), (L + 1, BODY_Z0 - LUG_H - 1),
+                      (L + 1, PLATE_Z0 - 0.5)]).close().extrude(60, both=True))
+    body = body.cut(cut)
+
     # паз под ласточкин хвост
     body = body.cut(dovetail_cutter(-1, L + 1))
+
+    # отверстия в наклонной грани, перпендикулярно ей
+    if SLOPE_HOLE_D > 0:
+        dy, dz = slope_top - WALL_OUT, PLATE_Z1 - SLOPE_Z0
+        n = (dz ** 2 + dy ** 2) ** 0.5
+        normal = (0, -dz / n, dy / n)
+        ym, zm = (WALL_OUT + slope_top) / 2, (SLOPE_Z0 + PLATE_Z1) / 2
+        span = (SLOPE_HOLES - 1) * PITCH
+        x0 = (L - FRONT_CUT / 2 - span) / 2
+        for i in range(SLOPE_HOLES):
+            xc = x0 + i * PITCH
+            hole = (cq.Workplane(cq.Plane(origin=(xc, ym, zm), xDir=(1, 0, 0), normal=normal))
+                    .circle(SLOPE_HOLE_D / 2).extrude(SLOPE_HOLE_DEPTH, both=True))
+            body = body.cut(hole)
 
     # облегчающие отверстия в боковой планке — в рёбрах между пазами
     if SIDE_HOLE_D > 0:
@@ -155,13 +191,6 @@ def build_body():
         slot = box(xc - NUT_AF / 2, xc + NUT_AF / 2,
                    BOSS_Y - 1, BOLT_Y + nut_ac / 2, NUT_Z0, NUT_Z0 + NUT_H)
         body = body.cut(slot)
-
-    # скругления внешних углов полки
-    try:
-        body = body.edges("|Z").edges(cq.selectors.BoxSelector(
-            (-1, PLATE_Y1 - 1, PLATE_Z0 - 1), (L + 1, PLATE_Y1 + 1, PLATE_Z1 + 1))).fillet(3)
-    except Exception:
-        pass
     return body
 
 
