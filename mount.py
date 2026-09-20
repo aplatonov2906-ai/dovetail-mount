@@ -38,7 +38,7 @@ JAW_L    = 40.0   # длина губки, мм
 JAW_X    = 60.0   # центр губки по X, мм
 JAW_H    = 14.0   # высота губки, мм
 JAW_GAP  = 0.8    # зазор губка/тело в затянутом состоянии (натяг), мм
-BOSS_OUT = 5.5    # утолщение тела наружу в зоне губки, мм
+BOSS_OUT = 5.5    # нижняя полка наружу от стенки, мм
 BOSS_TOP = None   # верх утолщения (производный)
 BOLT_DX  = 13.0   # болты на ±BOLT_DX от центра губки, мм
 BOLT_D   = 4.4    # отверстие под М4
@@ -134,7 +134,8 @@ def build_body():
             (PLATE_Y1, PLATE_Z1), (PLATE_Y1, PLATE_Z0), (WALL_IN + GUSSET, PLATE_Z0),
             (WALL_IN, PLATE_Z0 - GUSSET), (WALL_IN, BODY_Z0)]
     body = yz_prism(prof, 0, L)
-    boss = box(JAW_X0, JAW_X1, BOSS_Y, WALL_OUT + 0.1, BODY_Z0, BOSS_TOP)
+    # нижняя полка во всю длину (как у прототипа), губка садится под неё
+    boss = box(0, L, BOSS_Y, WALL_OUT + 0.1, BODY_Z0, BOSS_TOP)
     body = body.union(boss)
 
     top_rail, _ = picatinny(0, L, PLATE_Z1 - 0.01, 0.0, TOP_SLOTS, "up")
@@ -145,7 +146,7 @@ def build_body():
     body = body.union(side_rail)
 
     # задний упор с отверстием (не доходит до коробки: заподлицо с дном паза)
-    lug = box(0, LUG_L, WALL_OUT, WALL_IN - DT_DEPTH - DT_CLEAR - 1.0, BODY_Z0 - LUG_H, BODY_Z0 + 0.1)
+    lug = box(0, LUG_L, BOSS_Y, WALL_IN - DT_DEPTH - DT_CLEAR - 1.0, BODY_Z0 - LUG_H, BODY_Z0 + 0.1)
     lug_hole = (cq.Workplane("XZ", origin=(LUG_L / 2, 0, BODY_Z0 - LUG_H / 2))
                 .circle(LUG_HOLE / 2).extrude(60, both=True))
     body = body.union(lug).cut(lug_hole)
