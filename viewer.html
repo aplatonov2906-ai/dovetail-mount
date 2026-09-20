@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Кронштейн 3D</title>
+<style>
+  html,body{margin:0;height:100%;background:#1c1f24;color:#ddd;font:14px system-ui,sans-serif;overflow:hidden}
+  #ui{position:absolute;left:12px;top:12px;background:rgba(0,0,0,.55);padding:10px 12px;border-radius:8px;line-height:1.7}
+  #ui label{display:block;cursor:pointer}
+  #ui b{color:#fff}
+  #hint{position:absolute;right:12px;bottom:10px;opacity:.6}
+  button{margin:4px 4px 0 0;background:#333;color:#eee;border:1px solid #555;border-radius:5px;padding:3px 8px;cursor:pointer}
+  button:hover{background:#444}
+</style>
+</head>
+<body>
+<div id="ui">
+  <b>dovetail-mount</b><br>
+  <label><input type="checkbox" id="cbBody" checked> тело (серое)</label>
+  <label><input type="checkbox" id="cbJaw" checked> губка (оранжевая)</label>
+  <label><input type="checkbox" id="cbRecv" checked> коробка + полоска (полупрозрачно)</label>
+  <label><input type="checkbox" id="cbExpl"> разнести губку</label>
+  <div>
+    <button data-v="iso">Изо</button><button data-v="left">Слева</button><button data-v="top">Сверху</button>
+    <button data-v="front">Спереди</button><button data-v="back">Сзади</button>
+  </div>
+  <div id="dims" style="opacity:.8;margin-top:4px"></div>
+</div>
+<div id="hint">ЛКМ — вращать · колесо — зум · ПКМ — сдвиг</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+<script>
+// минимальные OrbitControls + STLLoader (бинарный/ASCII) без модулей
+(function(){
+const T=THREE;
+T.STLLoader=function(){};
+T.STLLoader.prototype.load=function(url,cb){fetch(url).then(r=>r.arrayBuffer()).then(buf=>cb(this.parse(buf)));};
+T.STLLoader.prototype.parse=function(buf){
+  const dv=new DataView(buf);
+  const isBinary=(()=>{const n=dv.getUint32(80,true);return buf.byteLength===84+n*50;})();
+  const pos=[],nor=[];
+  if(isBinary){const n=dv.getUint32(80,true);let o=84;
+    for(let i=0;i<n;i++){const nx=dv.getFloat32(o,true),ny=dv.getFloat32(o+4,true),nz=dv.getFloat32(o+8,true);o+=12;
+      for(let k=0;k<3;k++){pos.push(dv.getFloat32(o,true),dv.getFloat32(o+4,true),dv.getFloat32(o+8,true));nor.push(nx,ny,nz);o+=12;}o+=2;}
+  }else{const txt=new TextDecoder().decode(buf);const re=/facet normal\s+(\S+)\s+(\S+)\s+(\S+)[\s\S]*?vertex\s+(\S+)\s+(\S+)\s+(\S+)\s+vertex\s+(\S+)\s+(\S+)\s+(\S+)\s+vertex\s+(\S+)\s+(\S+)\s+(\S+)/g;let m;
+    while((m=re.exec(txt))){const v=m.slice(1).map(parseFloat);for(let k=0;k<3;k++){pos.push(v[3+k*3],v[4+k*3],v[5+k*3]);nor.push(v[0],v[1],v[2]);}}}
+  const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(pos,3));g.setAttribute('normal',new T.Float32BufferAttribute(nor,3));return g;};
+
+T.OrbitControls=function(cam,dom){
+  const self=this;this.target=new T.Vector3();let sph=new T.Spherical();let dragging=0;let px=0,py=0;
+  function update(){const off=new T.Vector3().setFromSpherical(sph);cam.position.copy(self.target).add(off);cam.lookAt(self.target);}
+  this.set=function(pos){const off=pos.clone().sub(self.target);sph.setFromVector3(off);sph.phi=Math.max(0.01,Math.min(Math.PI-0.01,sph.phi));update();};
+  this.update=update;
+  dom.addEventListener('contextmenu',e=>e.preventDefault());
+  dom.addEventListener('mousedown',e=>{dragging=e.button===2||e.shiftKey?2:1;px=e.clientX;py=e.clientY;});
+  window.addEventListener('mouseup',()=>dragging=0);
+  window.addEventListener('mousemove',e=>{if(!dragging)return;const dx=e.clientX-px,dy=e.clientY-py;px=e.clientX;py=e.clientY;
+    if(dragging===1){sph.theta-=dx*0.008;sph.phi-=dy*0.008;sph.phi=Math.max(0.01,Math.min(Math.PI-0.01,sph.phi));}
+    else{const r=sph.radius;const right=new T.Vector3().setFromMatrixColumn(cam.matrix,0);const up=new T.Vector3().setFromMatrixColumn(cam.matrix,1);
+      self.target.add(right.multiplyScalar(-dx*r*0.0015)).add(up.multiplyScalar(dy*r*0.0015));}
+    update();});
+  dom.addEventListener('wheel',e=>{e.preventDefault();sph.radius*=e.deltaY>0?1.1:0.9;update();},{passive:false});
+};
+})();
+
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x1c1f24);
+const cam=new THREE.PerspectiveCamera(40,innerWidth/innerHeight,1,3000);
+const ren=new THREE.WebGLRenderer({antialias:true});ren.setSize(innerWidth,innerHeight);ren.setPixelRatio(devicePixelRatio);document.body.appendChild(ren.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff,0x334455,0.9));
+const dl=new THREE.DirectionalLight(0xffffff,0.9);dl.position.set(-120,-200,260);scene.add(dl);
+const dl2=new THREE.DirectionalLight(0xffffff,0.35);dl2.position.set(150,100,-100);scene.add(dl2);
+const ctl=new THREE.OrbitControls(cam,ren.domElement);
+// модель: X вдоль ствола, Y поперёк, Z вверх → three: up = Z
+cam.up.set(0,0,1);
+const grid=new THREE.GridHelper(400,40,0x444a55,0x2c3038);grid.rotation.x=Math.PI/2;grid.position.z=-30;scene.add(grid);
+scene.add(new THREE.AxesHelper(30));
+
+const mats={body:new THREE.MeshStandardMaterial({color:0x9a9ea6,metalness:0.2,roughness:0.55}),
+            jaw:new THREE.MeshStandardMaterial({color:0xd9782e,metalness:0.2,roughness:0.55})};
+const parts={};const loader=new THREE.STLLoader();
+let jawMesh=null;
+function add(name,url,mat){loader.load(url,g=>{g.computeVertexNormals();const m=new THREE.Mesh(g,mat);m.name=name;parts[name]=m;scene.add(m);
+  if(name==='jaw')jawMesh=m;g.computeBoundingBox();const b=g.boundingBox;
+  document.getElementById('dims').innerHTML+=`${name}: ${(b.max.x-b.min.x).toFixed(0)}×${(b.max.y-b.min.y).toFixed(0)}×${(b.max.z-b.min.z).toFixed(0)} мм<br>`;
+  if(name==='body')setView('iso');});}
+add('body','out/mount_body.stl',mats.body);
+add('jaw','out/mount_jaw.stl',mats.jaw);
+
+// условная ствольная коробка с полоской (по параметрам модели)
+const RECV=new THREE.Group();
+const rw=34,rh=53,recvTop=46,L=150;
+const box=new THREE.Mesh(new THREE.BoxGeometry(L+60,rw,rh),new THREE.MeshStandardMaterial({color:0x3a6ea5,transparent:true,opacity:0.25}));
+box.position.set(L/2,0,recvTop-rh/2);RECV.add(box);
+const edges=new THREE.LineSegments(new THREE.EdgesGeometry(box.geometry),new THREE.LineBasicMaterial({color:0x7fb2e6}));edges.position.copy(box.position);RECV.add(edges);
+// полоска: трапеция 4.5 по лицу, 2 мм выступ, 45°
+const sh=new THREE.Shape();sh.moveTo(-17,-4.25);sh.lineTo(-19,-2.25);sh.lineTo(-19,2.25);sh.lineTo(-17,4.25);sh.closePath();
+const strip=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:90,bevelEnabled:false}),new THREE.MeshStandardMaterial({color:0x5fa8ff}));
+strip.rotation.y=Math.PI/2;strip.position.set(30,0,0);RECV.add(strip);
+scene.add(RECV);
+
+function setView(v){const c=new THREE.Vector3(L/2,-10,15);ctl.target.copy(c);const d=260;
+  const p={iso:new THREE.Vector3(-150,-200,150),left:new THREE.Vector3(0,-d,0),top:new THREE.Vector3(0,-0.01,d),front:new THREE.Vector3(d,0,0),back:new THREE.Vector3(-d,0,0)}[v];
+  ctl.set(c.clone().add(p));}
+document.querySelectorAll('button[data-v]').forEach(b=>b.onclick=()=>setView(b.dataset.v));
+const cb=(id,f)=>document.getElementById(id).onchange=e=>f(e.target.checked);
+cb('cbBody',v=>parts.body&&(parts.body.visible=v));cb('cbJaw',v=>parts.jaw&&(parts.jaw.visible=v));cb('cbRecv',v=>RECV.visible=v);
+cb('cbExpl',v=>jawMesh&&(jawMesh.position.z=v?-25:0));
+addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight);});
+(function loop(){requestAnimationFrame(loop);ren.render(scene,cam);})();
+</script>
+</body>
+</html>
