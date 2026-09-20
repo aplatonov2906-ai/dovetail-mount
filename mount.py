@@ -1,6 +1,13 @@
 """
-Кронштейн на боковую планку «ласточкин хвост» (АК-тип) с верхней и боковой
-планками Пикатинни. Параметрическая модель CadQuery для 3D-печати.
+Кронштейн на боковую планку «ласточкин хвост» с верхней и боковой планками
+Пикатинни, по образцу прототипа с фото. Параметрическая модель CadQuery
+для 3D-печати.
+
+Схема прототипа: толстая вертикальная пластина стоит на боку коробки;
+верхняя планка идёт по её верхнему ребру на брусе со сквозными отверстиями;
+боковая планка на наружной грани спереди; задний нижний угол срезан
+наискось, на конце среза упор с отверстием; нижняя губка отдельной деталью
+на двух винтах сверху через мостик.
 
 Система координат (как на оружии):
   X — вдоль ствола, 0 = задний торец кронштейна, +X вперёд
@@ -13,87 +20,91 @@ import math
 import os
 import cadquery as cq
 
-# ───────── ПАРАМЕТРЫ — правь под свою реплику ─────────
-# «Ласточкин хвост» на коробке (проверить штангенциркулем!)
-DT_FACE  = 15.0   # высота планки по лицевой грани, мм (замер друга: 15)
-DT_DEPTH = 5.5    # выступ планки над коробкой, мм (замер друга: 5–6)
-DT_ANGLE = 45.0   # угол скосов, градусов
+# ───────── ПАРАМЕТРЫ ─────────
+# «Ласточкин хвост» на коробке (замеры друга 21.09.2026)
+DT_FACE  = 15.0   # высота планки по лицевой грани, мм
+DT_DEPTH = 5.5    # выступ планки над коробкой, мм (5–6)
+DT_ANGLE = 45.0   # угол скосов, градусов (не мерили)
 DT_CLEAR = 0.25   # зазор на печать по каждой грани, мм
 
 # Коробка
 RECV_HALF_W = 17.0  # половина ширины ствольной коробки, мм
-PLATE_BASE  = 0.0   # планка отлита заодно с коробкой, основания нет
-RECV_TOP    = 50.0  # от середины планки до верха коробки: верх планки 42,5 от верха + 15/2, мм
-TOP_CLEAR   = 2.5   # зазор между крышкой и верхней полкой кронштейна, мм
+RECV_TOP    = 50.0  # от середины планки до верха коробки (верх планки 42,5 + 15/2), мм
+RELIEF      = 1.5   # отступ пластины от коробки выше зоны планки, мм
+RELIEF_Z    = 15.0  # выше этой высоты пластина не касается коробки
 
-# Тело
-L        = 150.0  # длина кронштейна, мм
-WALL_T   = 12.0   # толщина боковой стенки, мм
-PLATE_T  = 6.0    # толщина верхней полки, мм
-GUSSET   = 4.0    # косынка стенка/полка, мм
-BODY_Z0  = -(DT_FACE / 2) + 1.0   # низ тела (разъём с губкой): чуть выше нижнего скоса
+# Пластина
+L        = 150.0  # длина, мм
+PLATE_T  = 12.0   # толщина пластины, мм
+BODY_Z0  = -(DT_FACE / 2) + 1.0   # низ пластины (разъём с губкой): чуть выше нижнего скоса
 
-# Нижняя губка (отдельная деталь, 2 болта М4)
-JAW_L    = 40.0   # длина губки, мм
-JAW_X    = 60.0   # центр губки по X, мм
-JAW_H    = 14.0   # высота губки, мм
-JAW_GAP  = 0.8    # зазор губка/тело в затянутом состоянии (натяг), мм
-BOSS_OUT = 5.5    # нижняя полка наружу от стенки, мм
-BOSS_TOP = None   # верх утолщения (производный)
-BOLT_DX  = 13.0   # болты на ±BOLT_DX от центра губки, мм
-BOLT_D   = 4.4    # отверстие под М4
-HEAD_D, HEAD_H = 8.0, 3.0      # цековка под головку DIN 912
-NUT_AF, NUT_H  = 7.2, 3.4      # паз под гайку М4 (7 мм по граням + зазор)
-NUT_Z0   = None   # низ паза гайки (производный)
+# Брус под верхнюю планку (с 11 сквозными отверстиями, как у прототипа)
+BAR_Z0   = RECV_TOP - 8.0   # низ бруса, мм
+BAR_H    = 12.0             # высота бруса, мм
+BAR_HOLE_D, BAR_HOLES, BAR_HOLE_PITCH = 7.0, 11, 12.0
+
+# Задний срез и упор
+REAR_CUT = 40.0            # длина косого среза заднего нижнего угла по X, мм
+LUG_L, LUG_H, LUG_HOLE = 12.0, 10.0, 5.0
+
+# Губка (отдельно, 2 винта М4×30 сверху через мостик)
+JAW_L    = 42.0
+JAW_X    = 86.0   # центр губки от заднего торца, мм
+JAW_H    = 16.0
+JAW_GAP  = 0.8    # натяг: зазор губка/тело при затяжке, мм
+BOSS_OUT = 12.0   # мостик наружу от пластины, мм
+BOLT_DX  = 13.0
+BOLT_D   = 4.4
+HEAD_D, HEAD_H = 8.0, 4.5      # цековка под головку DIN 912
+NUT_AF, NUT_H  = 7.2, 3.4      # паз под гайку М4
 
 # Пикатинни (MIL-STD-1913)
 RAIL_W, RAIL_NECK_W = 21.2, 15.67
-RAIL_CH  = (RAIL_W - RAIL_NECK_W) / 2   # 45° фаска ≈ 2.77
+RAIL_CH  = (RAIL_W - RAIL_NECK_W) / 2
 RAIL_NECK_H = 1.5
 RAIL_H   = RAIL_CH + RAIL_NECK_H
 SLOT_W, SLOT_D, PITCH = 5.23, 3.0, 10.01
 TOP_SLOTS = 14
 
-# Боковая планка
-SIDE_X0, SIDE_X1 = 40.0, 125.0
-SIDE_ZC  = 25.0   # центр боковой планки по Z, мм
-SIDE_HOLE_D = 6.0 # облегчающие отверстия (0 — выключить)
-
-# Внешний вид как у прототипа
-SLOPE_Z0     = 38.0   # где начинается наклонная грань над боковой планкой, мм
-SLOPE_HOLE_D = 6.0    # отверстия в наклонной грани, глухие (0 — выключить)
-SLOPE_HOLE_DEPTH = 6.0
-SLOPE_HOLES  = 11
-FRONT_CUT    = 28.0   # косой срез нижней части спереди, мм по X
-LUG_L, LUG_H, LUG_HOLE = 12.0, 10.0, 5.0   # задний упор с отверстием
+# Боковая планка (спереди, 8 пазов, отверстия в рёбрах)
+SIDE_LEN = 92.0
+SIDE_ZC  = 23.0
+SIDE_HOLE_D = 6.0
 
 # ───────── ПРОИЗВОДНЫЕ ─────────
-WALL_IN  = -(RECV_HALF_W + PLATE_BASE)      # внутренняя грань стенки (основание призмы)
-WALL_OUT = WALL_IN - WALL_T
+WALL_IN  = -RECV_HALF_W                 # внутренняя грань пластины (сидит на коробке)
+WALL_REL = WALL_IN - RELIEF             # внутренняя грань выше зоны планки
+WALL_OUT = WALL_IN - PLATE_T
+BAR_Z1   = BAR_Z0 + BAR_H
+BAR_Y_IN, BAR_Y_OUT = WALL_REL, WALL_REL - RAIL_W   # брус шириной с планку, заподлицо изнутри
+RAIL_YC  = (BAR_Y_IN + BAR_Y_OUT) / 2   # ось верхней планки
 BOSS_Y   = WALL_OUT - BOSS_OUT
-PLATE_Z0 = RECV_TOP + TOP_CLEAR
-PLATE_Z1 = PLATE_Z0 + PLATE_T
-PLATE_Y1 = RAIL_W / 2 + 2.0
-BOLT_Y   = WALL_OUT - 0.5                    # ось болтов
-NUT_Z0   = BODY_Z0 + 4.5                     # 4,5 мм тела под гайкой
-BOSS_TOP = NUT_Z0 + NUT_H + 2.5
+BOLT_Y   = WALL_OUT - 7.0               # ось винтов: снаружи от боковой планки, ключ проходит
+BOSS_TOP = BODY_Z0 + 14.5
 JAW_X0, JAW_X1 = JAW_X - JAW_L / 2, JAW_X + JAW_L / 2
+SIDE_X1, SIDE_X0 = L - 3.0, L - 3.0 - SIDE_LEN
 
 
 def yz_prism(points, x0, x1):
-    """Полигон в плоскости YZ (точки (y, z)), вытянутый по X от x0 до x1."""
-    return (cq.Workplane("YZ", origin=(x0, 0, 0))
-            .polyline(points).close().extrude(x1 - x0))
+    return cq.Workplane("YZ", origin=(x0, 0, 0)).polyline(points).close().extrude(x1 - x0)
+
+
+def xz_prism(points, y0, y1):
+    """Полигон в плоскости XZ (точки (x, z)), вытянутый по Y от y0 до y1."""
+    return (cq.Workplane("XZ", origin=(0, y0, 0)).polyline(points).close()
+            .extrude(-(y1 - y0)))
 
 
 def box(x0, x1, y0, y1, z0, z1):
-    return (cq.Workplane("XY")
-            .box(x1 - x0, y1 - y0, z1 - z0, centered=False)
+    return (cq.Workplane("XY").box(x1 - x0, y1 - y0, z1 - z0, centered=False)
             .translate((x0, y0, z0)))
 
 
+def cyl_y(x, z, d, y0=-60, y1=20):
+    return cq.Workplane("XZ", origin=(x, y0, z)).circle(d / 2).extrude(-(y1 - y0))
+
+
 def dovetail_cutter(x0, x1):
-    """Паз под призму (охватывающий), режется от внутренней грани стенки."""
     f = DT_FACE / 2 + DT_CLEAR
     b = DT_FACE / 2 + DT_DEPTH * math.tan(math.radians(DT_ANGLE)) + DT_CLEAR
     d = DT_DEPTH + DT_CLEAR
@@ -102,140 +113,114 @@ def dovetail_cutter(x0, x1):
     return yz_prism(pts, x0, x1)
 
 
-def picatinny(x0, x1, base_z, center_y, n_slots, direction="up"):
-    """Планка Пикатинни вдоль X. direction: 'up' (верх +Z) или 'left' (верх −Y)."""
-    length = x1 - x0
-    h, w2, n2, ch = RAIL_H, RAIL_W / 2, RAIL_NECK_W / 2, RAIL_CH
-    # профиль в локальных (u = поперёк, v = высота от основания)
+def picatinny(x0, x1, base, center, n_slots, direction="up"):
+    """Планка вдоль X. 'up': основание на Z=base, ось Y=center. 'left': основание на Y=base, ось Z=center."""
+    h, w2, n2 = RAIL_H, RAIL_W / 2, RAIL_NECK_W / 2
     prof = [(-n2, 0), (n2, 0), (n2, RAIL_NECK_H), (w2, h), (-w2, h), (-n2, RAIL_NECK_H)]
     if direction == "up":
-        pts = [(center_y + u, base_z + v) for u, v in prof]
-    else:  # 'left': основание на плоскости Y = base_z... используем center как Z
-        pts = [(base_z - v, center_y + u) for u, v in prof]
+        pts = [(center + u, base + v) for u, v in prof]
+    else:
+        pts = [(base - v, center + u) for u, v in prof]
     rail = yz_prism(pts, x0, x1)
-    span = (n_slots - 1) * PITCH
-    start = x0 + (length - span) / 2
+    start = x0 + ((x1 - x0) - (n_slots - 1) * PITCH) / 2
     for i in range(n_slots):
         xc = start + i * PITCH
         if direction == "up":
-            cut = box(xc - SLOT_W / 2, xc + SLOT_W / 2, center_y - w2 - 1, center_y + w2 + 1,
-                      base_z + h - SLOT_D, base_z + h + 1)
+            cut = box(xc - SLOT_W / 2, xc + SLOT_W / 2, center - w2 - 1, center + w2 + 1,
+                      base + h - SLOT_D, base + h + 1)
         else:
-            cut = box(xc - SLOT_W / 2, xc + SLOT_W / 2, base_z - h - 1, base_z - h + SLOT_D,
-                      center_y - w2 - 1, center_y + w2 + 1)
+            cut = box(xc - SLOT_W / 2, xc + SLOT_W / 2, base - h - 1, base - h + SLOT_D,
+                      center - w2 - 1, center + w2 + 1)
         rail = rail.cut(cut)
     return rail, start
 
 
 def build_body():
-    # профиль корпуса в YZ: стенка → наклонная грань → верх с планкой → полка над коробкой
-    slope_top = WALL_IN - 1.0   # наклон кончается над стенкой, полка остаётся полной толщины
-    prof = [(WALL_OUT, BODY_Z0), (WALL_OUT, SLOPE_Z0), (slope_top, PLATE_Z1),
-            (PLATE_Y1, PLATE_Z1), (PLATE_Y1, PLATE_Z0), (WALL_IN + GUSSET, PLATE_Z0),
-            (WALL_IN, PLATE_Z0 - GUSSET), (WALL_IN, BODY_Z0)]
-    body = yz_prism(prof, 0, L)
-    # нижняя полка во всю длину (как у прототипа), губка садится под неё
-    boss = box(0, L, BOSS_Y, WALL_OUT + 0.1, BODY_Z0, BOSS_TOP)
-    body = body.union(boss)
+    # пластина: внизу прижата к коробке, выше — с отступом
+    plate = (box(0, L, WALL_OUT, WALL_IN, BODY_Z0, RELIEF_Z)
+             .union(box(0, L, WALL_OUT, WALL_REL, RELIEF_Z - 0.1, BAR_Z0 + 0.1)))
+    bar = box(0, L, BAR_Y_OUT, BAR_Y_IN, BAR_Z0, BAR_Z1)
+    body = plate.union(bar)
 
-    top_rail, _ = picatinny(0, L, PLATE_Z1 - 0.01, 0.0, TOP_SLOTS, "up")
+    top_rail, _ = picatinny(0, L, BAR_Z1 - 0.01, RAIL_YC, TOP_SLOTS, "up")
     body = body.union(top_rail)
 
-    n_side = int((SIDE_X1 - SIDE_X0) // PITCH)
+    # мостик под винты губки
+    boss = box(JAW_X0, JAW_X1, BOSS_Y, WALL_OUT + 0.1, BODY_Z0, BOSS_TOP)
+    body = body.union(boss)
+
+    # боковая планка спереди
+    n_side = int(SIDE_LEN // PITCH)
     side_rail, s0 = picatinny(SIDE_X0, SIDE_X1, WALL_OUT + 0.01, SIDE_ZC, n_side, "left")
     body = body.union(side_rail)
 
-    # задний упор с отверстием (не доходит до коробки: заподлицо с дном паза)
-    lug = box(0, LUG_L, BOSS_Y, WALL_IN - DT_DEPTH - DT_CLEAR - 1.0, BODY_Z0 - LUG_H, BODY_Z0 + 0.1)
-    lug_hole = (cq.Workplane("XZ", origin=(LUG_L / 2, 0, BODY_Z0 - LUG_H / 2))
-                .circle(LUG_HOLE / 2).extrude(60, both=True))
-    body = body.union(lug).cut(lug_hole)
-
-    # косой срез нижней части спереди (верхняя планка остаётся во всю длину)
-    cut = (cq.Workplane("XZ", origin=(0, 0, 0))
-           .polyline([(L - FRONT_CUT, BODY_Z0 - LUG_H - 1), (L + 1, BODY_Z0 - LUG_H - 1),
-                      (L + 1, PLATE_Z0 - 0.5)]).close().extrude(60, both=True))
+    # косой срез заднего нижнего угла (брус с планкой остаётся во всю длину)
+    z_top = BAR_Z0 - 3.0
+    slope = REAR_CUT / (z_top - BODY_Z0)
+    cut = xz_prism([(-1, z_top), (-1, BODY_Z0 - 30), (REAR_CUT + 30 * slope, BODY_Z0 - 30)],
+                   BOSS_Y - 5, WALL_IN + 5)
     body = body.cut(cut)
+
+    # упор с отверстием на конце среза (не касается коробки: заподлицо с дном паза)
+    lug = box(REAR_CUT, REAR_CUT + LUG_L, WALL_OUT, WALL_IN - DT_DEPTH - DT_CLEAR - 1.0,
+              BODY_Z0 - LUG_H, BODY_Z0 + 0.1)
+    body = body.union(lug).cut(cyl_y(REAR_CUT + LUG_L / 2, BODY_Z0 - LUG_H / 2, LUG_HOLE))
 
     # паз под ласточкин хвост
     body = body.cut(dovetail_cutter(-1, L + 1))
 
-    # отверстия в наклонной грани, перпендикулярно ей
-    if SLOPE_HOLE_D > 0:
-        dy, dz = slope_top - WALL_OUT, PLATE_Z1 - SLOPE_Z0
-        n = (dz ** 2 + dy ** 2) ** 0.5
-        normal = (0, -dz / n, dy / n)
-        ym, zm = (WALL_OUT + slope_top) / 2, (SLOPE_Z0 + PLATE_Z1) / 2
-        span = (SLOPE_HOLES - 1) * PITCH
-        x0 = (L - FRONT_CUT / 2 - span) / 2
-        for i in range(SLOPE_HOLES):
-            xc = x0 + i * PITCH
-            hole = (cq.Workplane(cq.Plane(origin=(xc, ym, zm), xDir=(1, 0, 0), normal=normal))
-                    .circle(SLOPE_HOLE_D / 2).extrude(SLOPE_HOLE_DEPTH, both=True))
-            body = body.cut(hole)
+    # сквозные отверстия в брусе
+    zc = (BAR_Z0 + BAR_Z1) / 2
+    x0 = (L - (BAR_HOLES - 1) * BAR_HOLE_PITCH) / 2
+    for i in range(BAR_HOLES):
+        body = body.cut(cyl_y(x0 + i * BAR_HOLE_PITCH, zc, BAR_HOLE_D))
 
-    # облегчающие отверстия в боковой планке — в рёбрах между пазами
-    if SIDE_HOLE_D > 0:
-        for i in range(n_side - 1):
-            xc = s0 + i * PITCH + PITCH / 2
-            hole = (cq.Workplane("XZ", origin=(xc, 0, SIDE_ZC))
-                    .circle(SIDE_HOLE_D / 2).extrude(60, both=True))
-            body = body.cut(hole)
+    # отверстия в боковой планке — в рёбрах между пазами, насквозь через пластину
+    for i in range(n_side - 1):
+        body = body.cut(cyl_y(s0 + i * PITCH + PITCH / 2, SIDE_ZC, SIDE_HOLE_D))
 
-    # болты: отверстия + пазы под гайки (вставляются сбоку снаружи)
+    # винты сверху: цековка под головку + отверстие через мостик
     for sx in (-1, 1):
         xc = JAW_X + sx * BOLT_DX
-        hole = (cq.Workplane("XY", origin=(xc, BOLT_Y, BODY_Z0 - 1))
-                .circle(BOLT_D / 2).extrude(BOSS_TOP + 1 - BODY_Z0 - 0.01))
-        body = body.cut(hole)
-        nut_ac = NUT_AF / math.cos(math.radians(30))  # по углам
-        slot = box(xc - NUT_AF / 2, xc + NUT_AF / 2,
-                   BOSS_Y - 1, BOLT_Y + nut_ac / 2, NUT_Z0, NUT_Z0 + NUT_H)
-        body = body.cut(slot)
+        hole = cq.Workplane("XY", origin=(xc, BOLT_Y, BODY_Z0 - 1)).circle(BOLT_D / 2).extrude(BOSS_TOP - BODY_Z0 + 2)
+        cbore = cq.Workplane("XY", origin=(xc, BOLT_Y, BOSS_TOP - HEAD_H)).circle(HEAD_D / 2).extrude(HEAD_H + 1)
+        body = body.cut(hole).cut(cbore)
     return body
 
 
 def build_jaw():
-    jaw = box(JAW_X0, JAW_X1, BOSS_Y, WALL_IN, BODY_Z0 - JAW_H, BODY_Z0)
+    z0 = BODY_Z0 - JAW_H
+    jaw = box(JAW_X0, JAW_X1, BOSS_Y, WALL_IN, z0, BODY_Z0)
     jaw = jaw.cut(dovetail_cutter(JAW_X0 - 1, JAW_X1 + 1))
-    # натяг: срезаем верх губки, чтобы при затяжке оставался зазор
     jaw = jaw.cut(box(JAW_X0 - 1, JAW_X1 + 1, BOSS_Y - 1, WALL_IN + 1, BODY_Z0 - JAW_GAP, BODY_Z0 + 1))
+    nut_ac = NUT_AF / math.cos(math.radians(30))
+    nut_z0 = z0 + 4.0
     for sx in (-1, 1):
         xc = JAW_X + sx * BOLT_DX
-        z0 = BODY_Z0 - JAW_H
         hole = cq.Workplane("XY", origin=(xc, BOLT_Y, z0 - 1)).circle(BOLT_D / 2).extrude(JAW_H + 2)
-        cbore = cq.Workplane("XY", origin=(xc, BOLT_Y, z0 - 1)).circle(HEAD_D / 2).extrude(HEAD_H + 1)
-        jaw = jaw.cut(hole).cut(cbore)
+        slot = box(xc - NUT_AF / 2, xc + NUT_AF / 2, BOSS_Y - 1, BOLT_Y + nut_ac / 2, nut_z0, nut_z0 + NUT_H)
+        jaw = jaw.cut(hole).cut(slot)
     return jaw
 
 
 def build_test(body, jaw):
-    """Короткий тест посадки: только зона губки, без полки и планок."""
-    region = box(JAW_X0 - 0.01, JAW_X1 + 0.01, BOSS_Y - 1, WALL_IN + 1, BODY_Z0 - JAW_H - 1, 12)
+    """Короткий тест посадки: только зона губки с мостиком."""
+    region = box(JAW_X0 - 0.01, JAW_X1 + 0.01, BOSS_Y - 1, WALL_IN + 1, BODY_Z0 - JAW_H - 1, RELIEF_Z)
     return body.intersect(region), jaw.intersect(region)
 
 
 if __name__ == "__main__":
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
     os.makedirs(out, exist_ok=True)
-    body = build_body()
-    jaw = build_jaw()
+    body, jaw = build_body(), build_jaw()
     tbody, tjaw = build_test(body, jaw)
-
-    cq.exporters.export(body, os.path.join(out, "mount_body.stl"), tolerance=0.02, angularTolerance=0.1)
-    cq.exporters.export(jaw, os.path.join(out, "mount_jaw.stl"), tolerance=0.02, angularTolerance=0.1)
-    cq.exporters.export(tbody, os.path.join(out, "test_body.stl"), tolerance=0.02, angularTolerance=0.1)
-    cq.exporters.export(tjaw, os.path.join(out, "test_jaw.stl"), tolerance=0.02, angularTolerance=0.1)
-
+    for name, obj in (("mount_body", body), ("mount_jaw", jaw), ("test_body", tbody), ("test_jaw", tjaw)):
+        cq.exporters.export(obj, os.path.join(out, name + ".stl"), tolerance=0.02, angularTolerance=0.1)
     asm = cq.Assembly()
     asm.add(body, name="body", color=cq.Color(0.6, 0.6, 0.6, 1.0))
     asm.add(jaw, name="jaw", color=cq.Color(0.35, 0.35, 0.35, 1.0))
     asm.save(os.path.join(out, "mount.step"))
-
-    bb = body.val().BoundingBox()
-    print(f"body: X {bb.xlen:.1f}  Y {bb.ylen:.1f}  Z {bb.zlen:.1f} mm, volume {body.val().Volume()/1000:.1f} cm3")
-    bj = jaw.val().BoundingBox()
-    print(f"jaw:  X {bj.xlen:.1f}  Y {bj.ylen:.1f}  Z {bj.zlen:.1f} mm, volume {jaw.val().Volume()/1000:.1f} cm3")
-    print("dovetail: face", DT_FACE + 2*DT_CLEAR, "base",
-          round(DT_FACE + 2*DT_DEPTH*math.tan(math.radians(DT_ANGLE)) + 2*DT_CLEAR, 2),
-          "depth", DT_DEPTH + DT_CLEAR)
+    for name, obj in (("body", body), ("jaw", jaw)):
+        bb = obj.val().BoundingBox()
+        print(f"{name}: X {bb.xlen:.1f}  Y {bb.ylen:.1f}  Z {bb.zlen:.1f} mm, volume {obj.val().Volume()/1000:.1f} cm3")
+    print("rail axis offset from bore:", round(-RAIL_YC, 1), "mm; rail top Z:", round(BAR_Z1 + RAIL_H, 1))
