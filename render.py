@@ -20,8 +20,8 @@ for i,(name, el, az) in enumerate(views):
 # section YZ at jaw center
 ax = fig.add_subplot(2,3,6)
 for m, c in ((body,"0.4"), (jaw,"tab:orange")):
-    s = m.section(plane_origin=[86,0,0], plane_normal=[1,0,0])
+    s = m.section(plane_origin=[83,0,0], plane_normal=[1,0,0])
     if s is not None:
         for e in s.discrete: ax.plot(e[:,1], e[:,2], color=c, lw=1.2)
-ax.set_aspect("equal"); ax.grid(True, lw=0.3); ax.set_title("section YZ at X=86 (Y across, Z up)")
+ax.set_aspect("equal"); ax.grid(True, lw=0.3); ax.set_title("section YZ at X=83 (Y across, Z up)")
 plt.tight_layout(); plt.savefig("out/preview.png", dpi=90)
