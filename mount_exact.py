@@ -113,8 +113,9 @@ def main():
         post_cut = cyl_z(px, py, POST_D + 1.2, 4.0, 8.6)
         body = diff(body, post_cut)
         jaw = diff(jaw, post_cut)
-    # 3. канал — во всю длину, в теле (зуб) и в губке (губа); натяг губки
-    body = diff(body, cutter(-70, 90))
+    # 3. канал — от передка до заднего упора (упор — родной ограничитель, его не трогаем); натяг губки
+    lug_x0 = 37.5
+    body = diff(body, cutter(-70, lug_x0))
     jaw = diff(jaw, cutter(JAW_X0 - 2, JAW_X1 + 2))
     jaw = diff(jaw, box(JAW_X0 - 2, JAW_X1 + 2, y_jaw_in - 4, y_out + 0.3, z_bot - JAW_GAP, z_bot + 1))
     # 4. втулки под гайки над стержнями (единственное добавление) + отверстия
@@ -146,6 +147,9 @@ def main():
     for name, m in (("exact_body", body), ("exact_jaw", jaw), ("exact_test_body", tbody),
                     ("exact_test_jaw", tjaw), ("exact_assembly", asm)):
         m = m.copy(); m.apply_transform(T); m.fix_normals()
+        parts = m.split(only_watertight=False)
+        if len(parts) > 1 and name != "exact_assembly":          # осколки булевых операций — выбросить
+            m = max(parts, key=lambda p: abs(p.volume))
         if len(m.faces) > 250000:
             m = m.simplify_quadric_decimation(face_count=220000)
             m.update_faces(m.nondegenerate_faces()); m.merge_vertices()
