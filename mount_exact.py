@@ -8,11 +8,11 @@ ref/proto_solid.stl, см. ref/solidify.py).
     (лицо 15, выступ 5,5) ложится после снятия ~0,7 мм с корня зуба и губы;
   - родная губка: скруглённый брусок; на его дне два конических гнезда под головки
     винтов, из верха торчат два стержня Ø4,2 (винты) — ровно под пазами боковой планки.
-Крепёж: два винта М3×35 с потайной головкой (DIN 7991) СНИЗУ, головки в родных гнёздах
-на дне губки, стержни исходника на губке оставлены. Винт вкручивается прямо в тело:
-в стенку и основание боковой планки над зазором (отверстие Ø2,5, резьбу нарезает сам винт).
-Стенка там 3,75 мм, поэтому ось винта сдвинута на 1,65 мм к стенке от оси родного стержня —
-иначе резьбе не во что врезаться. Ничего не добавлено.
+Разъём губка/тело — по низу тела (Z 0,21): губка — нижние 14 мм родного бруска; его
+скруглённый верх со стержнями остаётся у тела и служит полкой, к которой губка крепится.
+Крепёж: два винта М3×20 с потайной головкой (DIN 7991) СНИЗУ, головки в родных гнёздах
+на дне губки, ось винта = ось родного стержня. Винт проходит губку и вкручивается в полку
+и стержень (глухое отверстие Ø2,5, резьбу нарезает сам винт). Ничего не добавлено.
 
 Выход: out/exact_body.stl, out/exact_jaw.stl, out/exact_test_body.stl, out/exact_test_jaw.stl,
        out/exact_assembly.stl — обе детали в сборе, только для просмотра.
@@ -35,9 +35,8 @@ JAW_X0, JAW_X1 = -19.0, 22.0          # родная губка оригинал
 JAW_GAP = 0.8                         # натяг: зазор губка/тело при затяжке
 BOLT_D = 3.4                          # отверстие под М3
 CSK_D, CSK_H = 6.4, 1.5               # потай под головку DIN 7991 М3 (Ø6) на дне губки
-TAP_D = 2.5                           # отверстие под резьбу М3 в теле (винт нарезает сам)
-SCREW_Y_IN = 0.3                      # ось винта: на столько внутрь от наружной грани стенки
-TAP_Z1 = 24.0                         # докуда идёт резьбовое отверстие в теле (система исходника)
+TAP_D = 2.5                           # глухое отверстие под резьбу М3 в полке и стержне (винт нарезает сам)
+TAP_Z1 = 6.8                          # докуда идёт резьбовое отверстие (стержень до 7,8 — кончик остаётся закрытым)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "out")
@@ -103,11 +102,8 @@ def main():
     d = fl - yo
     cutter = lambda x0, x1: yz_prism([(fl, zc + f), (fl, zc - f), (yo, zc - f + d * tb), (yo, zc + f - d * tt)], x0, x1)
 
-    # 1. губка — родной брусок целиком: ниже низа тела + его скруглённый верх снаружи стенки (до стержней)
-    jaw_region = union(box(JAW_X0 - 1.5, JAW_X1 + 1.5, y_jaw_in - 3, y_jaw_out + 2, z_bot - 30, z_bot),
-                       box(JAW_X0 - 1.5, JAW_X1 + 1.5, y_out + 0.3, y_jaw_out + 2, z_bot - 0.1, 4.7))
-    for (px, py) in posts:                                                       # родные стержни — целиком к губке
-        jaw_region = union(jaw_region, cyl_z(px, py, 6.0, 4.6, 9.0))
+    # 1. губка — нижние 14 мм родного бруска (ниже низа тела); его верх со стержнями остаётся у тела как полка
+    jaw_region = box(JAW_X0 - 1.5, JAW_X1 + 1.5, y_jaw_in - 3, y_jaw_out + 2, z_bot - 30, z_bot)
     jaw = inter(solid, jaw_region)
     body = diff(solid, jaw_region)
     # 3. канал — от передка до заднего упора (упор — родной ограничитель, его не трогаем); натяг губки
@@ -115,18 +111,16 @@ def main():
     body = diff(body, cutter(-70, lug_x0))
     jaw = diff(jaw, cutter(JAW_X0 - 2, JAW_X1 + 2))
     jaw = diff(jaw, box(JAW_X0 - 2, JAW_X1 + 2, y_jaw_in - 4, y_out + 0.3, z_bot - JAW_GAP, z_bot + 1))
-    # 4. винты снизу: по X — как родные стержни, по Y — у стенки, чтобы резьба сидела в теле
+    # 4. винты снизу по оси родных стержней: сквозь губку, потай на дне; глухая резьба в полке и стержне
     z_jaw0 = jaw.bounds[0][2]
-    sy = y_out - SCREW_Y_IN
     for (px, py) in posts:
-        jaw = diff(jaw, cyl_z(px, sy, BOLT_D, z_jaw0 - 1, 9.0))                # сквозь губку и её стержень
-        csk = cq_to_tm(cq.Workplane("XY", origin=(px, sy, z_jaw0 - 0.5)).circle(CSK_D / 2 + 0.5)
+        jaw = diff(jaw, cyl_z(px, py, BOLT_D, z_jaw0 - 1, z_bot + 1))
+        csk = cq_to_tm(cq.Workplane("XY", origin=(px, py, z_jaw0 - 0.5)).circle(CSK_D / 2 + 0.5)
                        .workplane(offset=CSK_H + 0.5).circle(BOLT_D / 2 + 0.15).loft())
-        jaw = diff(jaw, csk)                                                    # потай под головку на дне
-        body = diff(body, cyl_z(px, sy, BOLT_D, z_bot - 1, 4.4))               # проход через низ стенки рядом с губкой
-        body = diff(body, cyl_z(px, sy, TAP_D, 4.3, TAP_Z1))                   # резьбовое отверстие в стенке и основании планки
-    print(f"jaw Z {z_jaw0:.2f}..{jaw.bounds[1][2]:.2f}; screws at Y={sy:.2f} (posts at {posts[0][1]:.2f}); "
-          f"M3x35 from Z={z_jaw0:.1f}: tip at {z_jaw0 + 35:.1f}, thread in body Z 4.3..{TAP_Z1}")
+        jaw = diff(jaw, csk)
+        body = diff(body, cyl_z(px, py, TAP_D, z_bot - 1, TAP_Z1))
+    print(f"jaw Z {z_jaw0:.2f}..{jaw.bounds[1][2]:.2f}; screws on post axes; M3x20 from Z={z_jaw0:.1f}: tip at {z_jaw0 + 20:.1f}, "
+          f"blind thread in shelf+post Z {z_bot:.1f}..{TAP_Z1}")
 
     region = box(JAW_X0 - 0.01, JAW_X1 + 0.01, y_jaw_in - 4, y_jaw_out + 3, z_jaw0 - 1, zc + 16)
     tbody, tjaw = inter(body, region), inter(jaw, region)
