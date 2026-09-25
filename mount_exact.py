@@ -1,16 +1,12 @@
 """
 Кронштейн ОДИН В ОДИН с игровой модели прототипа (ref/proto_sr3mp_mount.obj →
-ref/proto_solid.stl, см. ref/solidify.py). Форма не перерисовывается: в готовое
-тело режется паз под планку, добавляется толщина только за пазом, отделяется
-губка, сверлятся отверстия под болты.
+ref/proto_solid.stl, см. ref/solidify.py). К форме НИЧЕГО не добавлено: в готовое
+тело только прорезан паз под планку, губка отделена по родному стыку, просверлены
+отверстия под два винта М4×20 сверху через родной мостик, в губке пазы под гайки.
 
-Правки относительно оригинала (только в зоне зажима):
-  - полоса вдоль низа (Z −6,5…+1) и утолщение снаружи под боковой планкой
-    (до Z 12) — иначе за пазом глубиной 5,75 не остаётся стенки (у оригинала 5 мм);
-  - в зоне губки мостик выступает наружу на 12,5 вместо 9,5 — под головки и гайки М4
-    (крутить шестигранником с шариком, под углом: над головками нависает боковая планка);
-  - как у оригинала: два винта М4×20 сверху через мостик (головки в цековках на мостике),
-    гайки в губке, вставляются сбоку в пазы.
+Паз режется на 3 мм в глубину (планка выступает на 5,5): кронштейн цепляется за
+наружные 3 мм скосов, до самой коробки 2,5 мм не достаёт — зато стенка оригинала
+(7,5 мм) остаётся целой, 4 мм за пазом.
 
 Выход: out/exact_body.stl, out/exact_jaw.stl, out/exact_test_body.stl, out/exact_test_jaw.stl
 Система координат выхода — как у mount.py: X вперёд, +Y — левая сторона (там планка), Z вверх,
@@ -23,16 +19,12 @@ import cadquery as cq
 
 # ───── параметры планки на коробке (замеры друга) ─────
 DT_FACE, DT_DEPTH, DT_ANGLE, DT_CLEAR = 15.0, 5.5, 45.0, 0.25
+DT_ENGAGE = 3.0       # на сколько паз захватывает планку (из 5,5)
 RECV_HALF_W = 19.25
 
 # ───── зона зажима (в системе игровой модели: X вдоль, −Y к коробке, Z вверх) ─────
-BODY_Z0 = -(DT_FACE / 2) + 1.0        # разъём тело/губка
-JAW_X0, JAW_X1 = -19.0, 22.0          # губка как у оригинала
-JAW_H, JAW_GAP = 14.0, 0.8
-STRIP_X0, STRIP_X1 = -57.0, 41.0      # полоса вдоль низа: от передка до упора
-PAD_TOP = 12.0                        # утолщение снаружи до низа боковой планки
-PAD_OUT = 2.5                         # утолщение снаружи за пазом (минимум: стенка за пазом ≈ 4,3 мм)
-BOSS_OUT_Y, BOSS_TOP = 12.5, 5.0      # мостик в зоне губки (шире оригинала на 3 мм — под головки М4)
+JAW_X0, JAW_X1 = -19.0, 22.0          # родная губка оригинала
+JAW_GAP = 0.8                         # натяг: зазор губка/тело при затяжке
 BOLT_DX, BOLT_D = 13.0, 4.4
 HEAD_D, HEAD_H = 8.0, 4.5
 NUT_AF, NUT_H = 7.2, 3.4
@@ -67,69 +59,68 @@ def diff(a, b):   return trimesh.boolean.difference([a, b], engine="manifold")
 def inter(a, b):  return trimesh.boolean.intersection([a, b], engine="manifold")
 
 
-def dovetail_cutter(y_in, x0, x1):
-    """Паз, режется от внутренней грани y_in вглубь тела (+Y)."""
+def dovetail_cutter(y_in, zc, x0, x1):
+    """Паз, режется от внутренней грани y_in вглубь тела (+Y) на DT_ENGAGE; ось паза на Z = zc."""
     f = DT_FACE / 2 + DT_CLEAR
-    b = DT_FACE / 2 + DT_DEPTH * math.tan(math.radians(DT_ANGLE)) + DT_CLEAR
-    d = DT_DEPTH + DT_CLEAR
-    return yz_prism([(y_in - 5, b), (y_in, b), (y_in + d, f), (y_in + d, -f), (y_in, -b), (y_in - 5, -b)], x0, x1)
+    b = DT_FACE / 2 + DT_ENGAGE * math.tan(math.radians(DT_ANGLE)) + DT_CLEAR
+    d = DT_ENGAGE + DT_CLEAR
+    return yz_prism([(y_in - 5, zc + b), (y_in, zc + b), (y_in + d, zc + f), (y_in + d, zc - f), (y_in, zc - b), (y_in - 5, zc - b)], x0, x1)
 
 
 def main():
     solid = trimesh.load(os.path.join(HERE, "ref", "proto_solid.stl"), force="mesh")
     print("proto solid:", len(solid.faces), "faces, vol", round(solid.volume / 1000, 1), "cm3")
 
-    # внутренняя/наружная грань нижней стенки — по сечению вне зоны губки
-    sec = solid.section(plane_origin=[-40, 0, 0], plane_normal=[1, 0, 0])
-    pts = np.vstack(sec.discrete)
-    band = pts[(pts[:, 2] > 2) & (pts[:, 2] < 9)]
+    # грани нижней стенки и низ тела — по сечению вне зоны губки
+    sec = np.vstack(solid.section(plane_origin=[-40, 0, 0], plane_normal=[1, 0, 0]).discrete)
+    band = sec[(sec[:, 2] > 2) & (sec[:, 2] < 9)]
     y_in, y_out = band[:, 1].min(), band[:, 1].max()
-    print(f"lower wall: inner face Y={y_in:.2f}, outer face Y={y_out:.2f}")
+    z_bot = sec[sec[:, 1] > y_in - 1][:, 2].min()
+    # мостик в зоне губки
+    sec0 = np.vstack(solid.section(plane_origin=[1.5, 0, 0], plane_normal=[1, 0, 0]).discrete)
+    boss = sec0[(sec0[:, 2] > z_bot + 1) & (sec0[:, 2] < z_bot + 9)]
+    y_boss, z_boss = boss[:, 1].max(), boss[boss[:, 1] > y_out + 2][:, 2].max()
+    zc = z_bot + DT_FACE / 2 - 1.0          # ось паза: разъём с губкой = родной низ тела
+    print(f"wall inner Y={y_in:.2f} outer Y={y_out:.2f}, body bottom Z={z_bot:.2f}, boss to Y={y_boss:.2f} top Z={z_boss:.2f}, channel axis Z={zc:.2f}")
 
-    body = solid
-    # 1. убрать родную губку (ниже разъёма) — только в её зоне
-    body = diff(body, box(JAW_X0 - 1, JAW_X1 + 1, -40, 40, -30, BODY_Z0))
-    # 2. полоса вдоль низа + утолщение снаружи под боковой планкой
-    body = union(body, box(STRIP_X0, STRIP_X1, y_in, y_out + PAD_OUT, BODY_Z0, 1.0))
-    body = union(body, box(STRIP_X0, STRIP_X1, y_out - 0.3, y_out + PAD_OUT, BODY_Z0, PAD_TOP))
-    # 3. мостик под гайки в зоне губки
-    body = union(body, box(JAW_X0, JAW_X1, y_out - 0.3, BOSS_OUT_Y, BODY_Z0, BOSS_TOP))
-    # 4. паз под планку — во всю длину
-    body = diff(body, dovetail_cutter(y_in, -70, 90))
-    # 5. винты сверху, как у оригинала: цековка под головку на мостике + сквозное отверстие
-    bolt_y = y_in + DT_DEPTH + DT_CLEAR + 2.3 + NUT_AF / math.cos(math.radians(30)) / 2   # гайка не пробивает дно паза
-    jaw_xc = (JAW_X0 + JAW_X1) / 2
-    for sx in (-1, 1):
-        xc = jaw_xc + sx * BOLT_DX
-        body = diff(body, cyl_z(xc, bolt_y, BOLT_D, BODY_Z0 - 1, BOSS_TOP + 1))
-        body = diff(body, cyl_z(xc, bolt_y, HEAD_D, BOSS_TOP - HEAD_H, BOSS_TOP + 1))
-    print(f"bolt axis Y={bolt_y:.2f} (channel floor at {y_in + DT_DEPTH + DT_CLEAR:.2f}, boss to {BOSS_OUT_Y})")
-
-    # губка
-    z0 = BODY_Z0 - JAW_H
-    jaw = box(JAW_X0, JAW_X1, y_in, BOSS_OUT_Y, z0, BODY_Z0)
-    jaw = diff(jaw, dovetail_cutter(y_in, JAW_X0 - 1, JAW_X1 + 1))
-    jaw = diff(jaw, box(JAW_X0 - 1, JAW_X1 + 1, y_in - 1, BOSS_OUT_Y + 1, BODY_Z0 - JAW_GAP, BODY_Z0 + 1))
+    # 1. губка — родной блок, отрезанный по низу тела
+    jaw_region = box(JAW_X0 - 1, JAW_X1 + 1, y_in - 3, y_boss + 2, z_bot - 30, z_bot)
+    jaw = inter(solid, jaw_region)
+    body = diff(solid, jaw_region)
+    # 2. паз под планку — во всю длину, в теле и в губке
+    body = diff(body, dovetail_cutter(y_in, zc, -70, 90))
+    jaw = diff(jaw, dovetail_cutter(y_in, zc, JAW_X0 - 2, JAW_X1 + 2))
+    jaw = diff(jaw, box(JAW_X0 - 2, JAW_X1 + 2, y_in - 2, y_boss + 2, z_bot - JAW_GAP, z_bot + 1))
+    # 3. винты сверху через родной мостик: цековка + отверстие; в губке пазы под гайки
     nut_ac = NUT_AF / math.cos(math.radians(30))
-    nut_z0 = z0 + 3.5
+    bolt_y = y_in + DT_ENGAGE + DT_CLEAR + 2.0 + nut_ac / 2
+    jaw_xc = (JAW_X0 + JAW_X1) / 2
+    z_jaw0 = jaw.bounds[0][2]
+    nut_z0 = z_jaw0 + 3.5
     for sx in (-1, 1):
         xc = jaw_xc + sx * BOLT_DX
-        jaw = diff(jaw, cyl_z(xc, bolt_y, BOLT_D, z0 - 1, BODY_Z0 + 1))
-        jaw = diff(jaw, box(xc - NUT_AF / 2, xc + NUT_AF / 2, bolt_y - nut_ac / 2, BOSS_OUT_Y + 1, nut_z0, nut_z0 + NUT_H))
+        body = diff(body, cyl_z(xc, bolt_y, BOLT_D, z_bot - 1, z_boss + 1))
+        body = diff(body, cyl_z(xc, bolt_y, HEAD_D, z_boss - HEAD_H, z_boss + 1))
+        jaw = diff(jaw, cyl_z(xc, bolt_y, BOLT_D, z_jaw0 - 1, z_bot + 1))
+        jaw = diff(jaw, box(xc - NUT_AF / 2, xc + NUT_AF / 2, bolt_y - nut_ac / 2, y_boss + 2, nut_z0, nut_z0 + NUT_H))
+    print(f"bolt axis Y={bolt_y:.2f} (head edge {bolt_y + HEAD_D/2:.2f} vs boss {y_boss:.2f}); channel floor Y={y_in + DT_ENGAGE + DT_CLEAR:.2f}")
 
-    # тест посадки: зона губки
-    region = box(JAW_X0 - 0.01, JAW_X1 + 0.01, y_in - 1, BOSS_OUT_Y + 1, z0 - 1, PAD_TOP + 2)
+    region = box(JAW_X0 - 0.01, JAW_X1 + 0.01, y_in - 3, y_boss + 2, z_jaw0 - 1, zc + 14)
     tbody, tjaw = inter(body, region), inter(jaw, region)
 
-    # в систему оружия: X вперёд (у модели перед — где боковая планка, −X), +Y — левая сторона
-    x_rear = body.bounds[1][0]   # задний торец → X = 0
-    T = np.array([[-1, 0, 0, x_rear], [0, 1, 0, RECV_HALF_W - y_in], [0, 0, 1, 0], [0, 0, 0, 1]], dtype=float)
+    # в систему оружия: X вперёд (у модели перед — где боковая планка, −X), +Y — левая сторона;
+    # дно паза садится на лицевую грань планки (RECV_HALF_W + DT_DEPTH), ось паза → Z = 0
+    x_rear = body.bounds[1][0]
+    dy = RECV_HALF_W + DT_DEPTH - (y_in + DT_ENGAGE + DT_CLEAR)
+    T = np.array([[-1, 0, 0, x_rear], [0, 1, 0, dy], [0, 0, 1, -zc], [0, 0, 0, 1]], dtype=float)
     os.makedirs(OUT, exist_ok=True)
     for name, m in (("exact_body", body), ("exact_jaw", jaw), ("exact_test_body", tbody), ("exact_test_jaw", tjaw)):
         m = m.copy(); m.apply_transform(T); m.fix_normals()
-        if len(m.faces) > 250000:   # marching cubes даёт избыточную сетку — упрощаем без потери формы
+        if len(m.faces) > 250000:
             m = m.simplify_quadric_decimation(face_count=220000)
-            m.merge_vertices(); m.fix_normals()
+            m.update_faces(m.nondegenerate_faces()); m.merge_vertices()
+            trimesh.repair.fill_holes(m); m.fix_normals()
+            assert m.is_watertight, name
         m.export(os.path.join(OUT, name + ".stl"))
         b = m.bounds
         print(f"{name}: wt={m.is_watertight} faces={len(m.faces)} vol={m.volume/1000:.1f} cm3 "
