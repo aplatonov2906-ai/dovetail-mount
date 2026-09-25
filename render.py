@@ -3,7 +3,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 body = trimesh.load("out/mount_body.stl"); jaw = trimesh.load("out/mount_jaw.stl")
-views = [("iso_front_left", 25, -135), ("iso_rear_right", 25, 40), ("side_left", 0, -90), ("top", 89, -90), ("front_end", 0, 0)]
+views = [("iso_front_left", 25, 135), ("iso_rear_right", 25, -40), ("side_left", 0, 90), ("top", 89, -90), ("front_end", 0, 0)]
 fig = plt.figure(figsize=(18, 11))
 for i,(name, el, az) in enumerate(views):
     ax = fig.add_subplot(2, 3, i+1, projection="3d")

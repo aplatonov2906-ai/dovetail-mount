@@ -66,7 +66,7 @@ const scene=new THREE.Scene();scene.background=new THREE.Color(0x1c1f24);
 const cam=new THREE.PerspectiveCamera(40,innerWidth/innerHeight,1,3000);
 const ren=new THREE.WebGLRenderer({antialias:true});ren.setSize(innerWidth,innerHeight);ren.setPixelRatio(devicePixelRatio);document.body.appendChild(ren.domElement);
 scene.add(new THREE.HemisphereLight(0xffffff,0x334455,0.9));
-const dl=new THREE.DirectionalLight(0xffffff,0.9);dl.position.set(-120,-200,260);scene.add(dl);
+const dl=new THREE.DirectionalLight(0xffffff,0.9);dl.position.set(-120,200,260);scene.add(dl);
 const dl2=new THREE.DirectionalLight(0xffffff,0.35);dl2.position.set(150,100,-100);scene.add(dl2);
 const ctl=new THREE.OrbitControls(cam,ren.domElement);
 // модель: X вдоль ствола, Y поперёк, Z вверх → three: up = Z
@@ -93,13 +93,13 @@ const box=new THREE.Mesh(new THREE.BoxGeometry(L+60,rw,rh),new THREE.MeshStandar
 box.position.set(L/2,0,recvTop-rh/2);RECV.add(box);
 const edges=new THREE.LineSegments(new THREE.EdgesGeometry(box.geometry),new THREE.LineBasicMaterial({color:0x7fb2e6}));edges.position.copy(box.position);RECV.add(edges);
 // полоска: трапеция 4.5 по лицу, 2 мм выступ, 45°
-const sh=new THREE.Shape();sh.moveTo(-19.25,-13);sh.lineTo(-24.75,-7.5);sh.lineTo(-24.75,7.5);sh.lineTo(-19.25,13);sh.closePath();
+const sh=new THREE.Shape();sh.moveTo(19.25,-13);sh.lineTo(24.75,-7.5);sh.lineTo(24.75,7.5);sh.lineTo(19.25,13);sh.closePath();
 const strip=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:90,bevelEnabled:false}),new THREE.MeshStandardMaterial({color:0x5fa8ff}));
 strip.rotation.y=Math.PI/2;strip.position.set(30,0,0);RECV.add(strip);
 scene.add(RECV);
 
-function setView(v){const c=new THREE.Vector3(L/2,-10,15);ctl.target.copy(c);const d=260;
-  const p={iso:new THREE.Vector3(-150,-200,150),left:new THREE.Vector3(0,-d,0),top:new THREE.Vector3(0,-0.01,d),front:new THREE.Vector3(d,0,0),back:new THREE.Vector3(-d,0,0)}[v];
+function setView(v){const c=new THREE.Vector3(L/2,10,15);ctl.target.copy(c);const d=260;
+  const p={iso:new THREE.Vector3(-150,200,150),left:new THREE.Vector3(0,d,0),top:new THREE.Vector3(0,0.01,d),front:new THREE.Vector3(d,0,0),back:new THREE.Vector3(-d,0,0)}[v];
   ctl.set(c.clone().add(p));}
 document.querySelectorAll('button[data-v]').forEach(b=>b.onclick=()=>setView(b.dataset.v));
 const cb=(id,f)=>document.getElementById(id).onchange=e=>f(e.target.checked);
