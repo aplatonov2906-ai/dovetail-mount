@@ -147,9 +147,9 @@ def main():
     for name, m in (("exact_body", body), ("exact_jaw", jaw), ("exact_test_body", tbody),
                     ("exact_test_jaw", tjaw), ("exact_assembly", asm)):
         m = m.copy(); m.apply_transform(T); m.fix_normals()
-        parts = m.split(only_watertight=False)
-        if len(parts) > 1 and name != "exact_assembly":          # осколки булевых операций — выбросить
-            m = max(parts, key=lambda p: abs(p.volume))
+        if name != "exact_assembly":                              # осколки булевых операций — выбросить
+            m = max(m.split(only_watertight=False), key=lambda p: len(p.faces))
+            m.update_faces(m.nondegenerate_faces()); m.merge_vertices(); trimesh.repair.fill_holes(m); m.fix_normals()
         if len(m.faces) > 250000:
             m = m.simplify_quadric_decimation(face_count=220000)
             m.update_faces(m.nondegenerate_faces()); m.merge_vertices()
