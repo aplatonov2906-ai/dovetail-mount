@@ -96,8 +96,8 @@ const rw=38.5,rh=59,recvTop=50,L=147;
 const box=new THREE.Mesh(new THREE.BoxGeometry(L+60,rw,rh),new THREE.MeshStandardMaterial({color:0x3a6ea5,transparent:true,opacity:0.25}));
 box.position.set(L/2,0,recvTop-rh/2);RECV.add(box);
 const edges=new THREE.LineSegments(new THREE.EdgesGeometry(box.geometry),new THREE.LineBasicMaterial({color:0x7fb2e6}));edges.position.copy(box.position);RECV.add(edges);
-// полоска: трапеция 4.5 по лицу, 2 мм выступ, 45°
-const sh=new THREE.Shape();sh.moveTo(19.25,-13);sh.lineTo(24.75,-7.5);sh.lineTo(24.75,7.5);sh.lineTo(19.25,13);sh.closePath();
+// планка: лицо 15 мм, выступ 5,5, подрез к корню (шире у лица)
+const sh=new THREE.Shape();sh.moveTo(19.25,-5.7);sh.lineTo(24.75,-7.5);sh.lineTo(24.75,7.5);sh.lineTo(19.25,5.3);sh.closePath();
 const strip=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:90,bevelEnabled:false}),new THREE.MeshStandardMaterial({color:0x5fa8ff}));
 strip.rotation.y=Math.PI/2;strip.position.set(30,0,0);RECV.add(strip);
 scene.add(RECV);

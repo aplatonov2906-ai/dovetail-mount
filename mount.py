@@ -112,11 +112,11 @@ def cyl_y(x, z, d, y0=-60, y1=20):
 
 
 def dovetail_cutter(x0, x1):
-    f = DT_FACE / 2 + DT_CLEAR
-    b = DT_FACE / 2 + DT_DEPTH * math.tan(math.radians(DT_ANGLE)) + DT_CLEAR
+    """Канал под планку, широкую у лица и узкую у корня: дно канала (у стенки) = лицо, к коробке сужается."""
+    f = DT_FACE / 2 + DT_CLEAR                                   # у дна канала (лицо планки)
     d = DT_DEPTH + DT_CLEAR
-    pts = [(WALL_IN + 5, b), (WALL_IN, b), (WALL_IN - d, f),
-           (WALL_IN - d, -f), (WALL_IN, -b), (WALL_IN + 5, -b)]
+    r = f - (d + 5) * math.tan(math.radians(DT_ANGLE))           # у устья, с запасом 5 мм наружу
+    pts = [(WALL_IN + 5, r), (WALL_IN - d, f), (WALL_IN - d, -f), (WALL_IN + 5, -r)]
     return yz_prism(pts, x0, x1)
 
 

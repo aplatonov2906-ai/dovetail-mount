@@ -1,16 +1,15 @@
 """
 Кронштейн ОДИН В ОДИН с игровой модели прототипа (ref/proto_sr3mp_mount.obj →
-ref/proto_solid.stl, см. ref/solidify.py). К форме НИЧЕГО не добавлено: в готовое
-тело только прорезан паз под планку, губка отделена по родному стыку, просверлены
-отверстия под два винта М4×20 сверху через родной мостик, в губке пазы под гайки.
+ref/proto_solid.stl, см. ref/solidify.py). К форме ничего не добавлено.
 
-Исходник сделан под планку ~11 мм, у реплики 15 — родная губка коротка при любом
-раскладе. Компромисс с минимально заметными отличиями (RAIL_TOP_Z, LIP_ENGAGE, LIP_T):
-  - верхняя губка — родной косой зуб на внутренней стороне; его нижняя грань (скрыта
-    к коробке) подрезана под 45° скос планки, зуб остаётся клином 3,2 мм в глубину;
-  - планка лицом ложится на стенку под зубом; нижний скос планки держит губка, её
-    захват 1,5 мм, поэтому родную губку пришлось удлинить вниз всего на 2,5 мм;
-  - винты М4×16 сверху через родной мостик, гайки в губке.
+У исходника уже есть полный зажим «ласточкин хвост» (ref/proto_native_clamp.png):
+зуб на теле сверху, губа на родной губке снизу, канал между ними 14 мм у стенки,
+сужается к коробке — планка ШИРЕ у лица (15 мм) и уже у корня. Планка друга
+(лицо 15, выступ 5,5) ложится в родной канал почти без реза: снимается ~0,7 мм
+с корня зуба и ~0,7 мм с корня губы, чтобы получить 15,5 (15 + зазор). Углы
+скосов — родные, с исходника (сверху ~22°, снизу ~16° от лица). Губка отделена по
+родному стыку, высота родная. Винты М4×14 (или ×16, кончик выйдет на 1,5 мм) сверху
+через родной мостик, гайки в губке.
 
 Выход: out/exact_body.stl, out/exact_jaw.stl, out/exact_test_body.stl, out/exact_test_jaw.stl
 Система координат выхода — как у mount.py: X вперёд, +Y — левая сторона (там планка), Z вверх,
@@ -22,15 +21,14 @@ import trimesh
 import cadquery as cq
 
 # ───── параметры планки на коробке (замеры друга) ─────
-DT_FACE, DT_DEPTH, DT_ANGLE, DT_CLEAR = 15.0, 5.5, 45.0, 0.25
+DT_FACE, DT_DEPTH, DT_CLEAR = 15.0, 5.5, 0.25
+TOP_ANGLE, BOT_ANGLE = 22.0, 16.0   # подрез планки от лица к корню, град.; сняты с родного зуба и губы исходника
+RAIL_AXIS_Z = -1.65                 # ось планки в системе исходника: середина родного канала (корень зуба 5.33, корень губы −8.66)
 RECV_HALF_W = 19.25
 
 # ───── зона зажима (в системе игровой модели: X вдоль, −Y к коробке, Z вверх) ─────
 JAW_X0, JAW_X1 = -19.0, 22.0          # родная губка оригинала
 JAW_GAP = 0.8                         # натяг: зазор губка/тело при затяжке
-RAIL_TOP_Z = 2.5    # верхнее ребро лицевой грани планки (система модели, низ тела = 0,21): выше — зуб тоньше, губка короче
-LIP_ENGAGE = 1.5    # захват нижнего скоса планки губкой, мм
-LIP_T      = 2.5    # толщина губы под захватом, мм
 BOLT_DX, BOLT_D = 13.0, 4.4
 HEAD_D, HEAD_H = 7.6, 4.5
 NUT_AF, NUT_H = 7.2, 3.4
@@ -77,46 +75,41 @@ def main():
     solid = trimesh.load(os.path.join(HERE, "ref", "proto_solid.stl"), force="mesh")
     print("proto solid:", len(solid.faces), "faces, vol", round(solid.volume / 1000, 1), "cm3")
 
-    # геометрия низа по сечению вне зоны губки: зуб, стенка под зубом, низ тела, мостик
+    # геометрия низа по сечению вне зоны губки: стенка (дно канала), низ тела; мостик — в зоне губки
     sec = np.vstack(solid.section(plane_origin=[-40, 0, 0], plane_normal=[1, 0, 0]).discrete)
-    tooth = sec[(sec[:, 2] > 3.0) & (sec[:, 2] < 7.0)]
-    y_tip = tooth[:, 1].min()                                   # кончик зуба (устье паза)
-    z_tooth = sec[(sec[:, 1] < y_tip + 0.3) & (sec[:, 2] < 9)][:, 2].min()   # низ зуба у кончика
-    y_floor = sec[(sec[:, 2] > 0.4) & (sec[:, 2] < 1.8)][:, 1].min()          # стенка под зубом = дно паза
+    y_floor = sec[(sec[:, 2] > 0.4) & (sec[:, 2] < 1.8)][:, 1].min()     # стенка под зубом = дно канала
+    y_tip = sec[(sec[:, 2] > 3.0) & (sec[:, 2] < 7.0)][:, 1].min()       # кончик зуба
     y_out = sec[(sec[:, 2] > 2) & (sec[:, 2] < 9)][:, 1].max()
     z_bot = sec[sec[:, 1] > -6][:, 2].min()
     sec0 = np.vstack(solid.section(plane_origin=[1.5, 0, 0], plane_normal=[1, 0, 0]).discrete)
     boss = sec0[(sec0[:, 2] > z_bot + 1) & (sec0[:, 2] < z_bot + 9) & (sec0[:, 1] > y_out + 2)]
     y_boss, z_boss = boss[:, 1].max(), boss[:, 2].max()
-    engage = y_floor - y_tip
-    tg = math.tan(math.radians(DT_ANGLE))
+    y_jaw_in = sec0[(sec0[:, 2] > -13) & (sec0[:, 2] < -3)][:, 1].min()  # внутренняя грань родной губки
+    zc = RAIL_AXIS_Z
+    fl = y_floor + DT_CLEAR
     f = DT_FACE / 2 + DT_CLEAR
-    zc = RAIL_TOP_Z - DT_FACE / 2                              # ось планки; зуб подрезается под её верхний скос
-    print(f"tooth tip Y={y_tip:.2f} bottom Z={z_tooth:.2f}; floor Y={y_floor:.2f} (engage {engage:.2f}); outer Y={y_out:.2f}; "
-          f"body bottom Z={z_bot:.2f}; boss Y={y_boss:.2f} top Z={z_boss:.2f}; channel axis Z={zc:.2f}; "
-          f"tooth trimmed at tip by {max(0.0, zc + f + engage*tg - z_tooth):.2f} mm")
+    print(f"floor Y={y_floor:.2f}, tooth tip Y={y_tip:.2f}, jaw inner Y={y_jaw_in:.2f}, outer Y={y_out:.2f}, body bottom Z={z_bot:.2f}, "
+          f"boss Y={y_boss:.2f} top Z={z_boss:.2f}; rail axis Z={zc:.2f}, face Z {zc-f:.2f}..{zc+f:.2f} at floor")
 
-    cutter = lambda x0, x1: yz_prism(
-        [(y_tip - 6, zc + f + engage * tg), (y_tip, zc + f + engage * tg),          # верх: полный захват до кончика зуба
-         (y_floor + DT_CLEAR, zc + f), (y_floor + DT_CLEAR, zc - f),                # лицо планки
-         (y_floor + DT_CLEAR - LIP_ENGAGE, zc - f - LIP_ENGAGE * tg),               # низ: захват LIP_ENGAGE
-         (y_tip - 6, zc - f - LIP_ENGAGE * tg)], x0, x1)
+    # канал правильной стороны: широкий у дна (лицо планки), сужается к коробке
+    tt, tb = math.tan(math.radians(TOP_ANGLE)), math.tan(math.radians(BOT_ANGLE))
+    yo = y_jaw_in - 4.0   # резак уходит за внутренние грани (там воздух)
+    d = fl - yo
+    cutter = lambda x0, x1: yz_prism([(fl, zc + f), (fl, zc - f), (yo, zc - f + d * tb), (yo, zc + f - d * tt)], x0, x1)
 
-    # 1. губка — родной блок + удлинение вниз до нижнего скоса планки
-    z_jaw0 = zc - f - LIP_ENGAGE * tg - LIP_T
-    jaw_region = box(JAW_X0 - 1, JAW_X1 + 1, y_tip - 3, y_boss + 2, z_bot - 30, z_bot)
+    # 1. губка — родной блок, родная высота
+    jaw_region = box(JAW_X0 - 1, JAW_X1 + 1, y_jaw_in - 3, y_boss + 2, z_bot - 30, z_bot)
     jaw = inter(solid, jaw_region)
-    jb = jaw.bounds
-    jaw = union(jaw, box(jb[0][0], jb[1][0], jb[0][1], jb[1][1], z_jaw0, jb[0][2] + 1.0))
     body = diff(solid, jaw_region)
-    # 2. паз — во всю длину, в теле (под зубом) и в губке
+    # 2. канал — во всю длину, в теле (зуб) и в губке (губа)
     body = diff(body, cutter(-70, 90))
     jaw = diff(jaw, cutter(JAW_X0 - 2, JAW_X1 + 2))
-    jaw = diff(jaw, box(JAW_X0 - 2, JAW_X1 + 2, y_tip - 4, y_boss + 3, z_bot - JAW_GAP, z_bot + 1))
+    jaw = diff(jaw, box(JAW_X0 - 2, JAW_X1 + 2, y_jaw_in - 4, y_boss + 3, z_bot - JAW_GAP, z_bot + 1))
     # 3. винты сверху через родной мостик; гайки в губке
     nut_ac = NUT_AF / math.cos(math.radians(30))
-    bolt_y = y_floor + DT_CLEAR + 2.0 + nut_ac / 2
+    bolt_y = fl + 2.0 + nut_ac / 2
     jaw_xc = (JAW_X0 + JAW_X1) / 2
+    z_jaw0 = jaw.bounds[0][2]
     nut_z0 = z_jaw0 + 3.5
     for sx in (-1, 1):
         xc = jaw_xc + sx * BOLT_DX
@@ -124,15 +117,16 @@ def main():
         body = diff(body, cyl_z(xc, bolt_y, HEAD_D, z_boss - HEAD_H, z_boss + 1))
         jaw = diff(jaw, cyl_z(xc, bolt_y, BOLT_D, z_jaw0 - 1, z_bot + 1))
         jaw = diff(jaw, box(xc - NUT_AF / 2, xc + NUT_AF / 2, bolt_y - nut_ac / 2, y_boss + 3, nut_z0, nut_z0 + NUT_H))
-    print(f"bolt axis Y={bolt_y:.2f} (head edge {bolt_y + HEAD_D/2:.2f} vs boss {y_boss:.2f}); jaw bottom Z={z_jaw0:.2f} (orig {jb[0][2]:.2f})")
+    print(f"bolt axis Y={bolt_y:.2f} (head edge {bolt_y + HEAD_D/2:.2f} vs boss {y_boss:.2f}); jaw Z {z_jaw0:.2f}..{z_bot:.2f} (native); "
+          f"bolt M4x14: tip at Z={z_boss - HEAD_H - 14:.1f}, nut Z {nut_z0:.1f}..{nut_z0 + NUT_H:.1f}")
 
-    region = box(JAW_X0 - 0.01, JAW_X1 + 0.01, y_tip - 4, y_boss + 3, z_jaw0 - 1, zc + 16)
+    region = box(JAW_X0 - 0.01, JAW_X1 + 0.01, y_jaw_in - 4, y_boss + 3, z_jaw0 - 1, zc + 16)
     tbody, tjaw = inter(body, region), inter(jaw, region)
 
     # в систему оружия: X вперёд (перед — где боковая планка, −X), +Y — левая сторона;
-    # дно паза = лицевая грань планки (RECV_HALF_W + DT_DEPTH), ось паза → Z = 0
+    # дно канала = лицевая грань планки (RECV_HALF_W + DT_DEPTH), ось планки → Z = 0
     x_rear = body.bounds[1][0]
-    dy = RECV_HALF_W + DT_DEPTH - (y_floor + DT_CLEAR)
+    dy = RECV_HALF_W + DT_DEPTH - fl
     T = np.array([[-1, 0, 0, x_rear], [0, 1, 0, dy], [0, 0, 1, -zc], [0, 0, 0, 1]], dtype=float)
     os.makedirs(OUT, exist_ok=True)
     np.savetxt(os.path.join(OUT, "exact_transform.txt"), T)
