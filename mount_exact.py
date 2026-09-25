@@ -10,9 +10,10 @@ ref/proto_solid.stl, см. ref/solidify.py).
     винтов, из верха торчат два стержня Ø4,2 (винты) — ровно под пазами боковой планки.
 Разъём губка/тело — по низу тела (Z 0,21): губка — нижние 14 мм родного бруска; его
 скруглённый верх со стержнями остаётся у тела и служит полкой, к которой губка крепится.
-Крепёж: два винта М3×20 с потайной головкой (DIN 7991) СНИЗУ, головки в родных гнёздах
-на дне губки, ось винта = ось родного стержня. Винт проходит губку и вкручивается в полку
-и стержень (глухое отверстие Ø2,5, резьбу нарезает сам винт). Ничего не добавлено.
+Крепёж: два винта М3×16 с цилиндрической головкой (DIN 912) СВЕРХУ, по оси родных
+стержней: стержни исходника — это и есть головки винтов, на их месте плоские посадочные
+площадки Ø6. Винт проходит полку (Ø3,4) и вкручивается в губку (глухое отверстие Ø2,5,
+резьбу нарезает сам винт). Ничего не добавлено.
 
 Выход: out/exact_body.stl, out/exact_jaw.stl, out/exact_test_body.stl, out/exact_test_jaw.stl,
        out/exact_assembly.stl — обе детали в сборе, только для просмотра.
@@ -35,8 +36,9 @@ JAW_X0, JAW_X1 = -19.0, 22.0          # родная губка оригинал
 JAW_GAP = 0.8                         # натяг: зазор губка/тело при затяжке
 BOLT_D = 3.4                          # отверстие под М3
 CSK_D, CSK_H = 6.4, 1.5               # потай под головку DIN 7991 М3 (Ø6) на дне губки
-TAP_D = 2.5                           # глухое отверстие под резьбу М3 в полке и стержне (винт нарезает сам)
-TAP_Z1 = 6.8                          # докуда идёт резьбовое отверстие (стержень до 7,8 — кончик остаётся закрытым)
+TAP_D = 2.5                           # глухое отверстие под резьбу М3 в губке (винт нарезает сам)
+TAP_Z0 = -12.5                        # дно резьбового отверстия в губке (дно губки −14,05, остаётся 1,5 мм)
+SEAT_D, SEAT_Z = 6.2, 3.9             # площадка под головку на полке: срезает родной стержень, ровная посадка
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "out")
@@ -111,16 +113,14 @@ def main():
     body = diff(body, cutter(-70, lug_x0))
     jaw = diff(jaw, cutter(JAW_X0 - 2, JAW_X1 + 2))
     jaw = diff(jaw, box(JAW_X0 - 2, JAW_X1 + 2, y_jaw_in - 4, y_out + 0.3, z_bot - JAW_GAP, z_bot + 1))
-    # 4. винты снизу по оси родных стержней: сквозь губку, потай на дне; глухая резьба в полке и стержне
+    # 4. винты сверху по оси родных стержней: площадка под головку на полке, проход сквозь полку, глухая резьба в губке
     z_jaw0 = jaw.bounds[0][2]
     for (px, py) in posts:
-        jaw = diff(jaw, cyl_z(px, py, BOLT_D, z_jaw0 - 1, z_bot + 1))
-        csk = cq_to_tm(cq.Workplane("XY", origin=(px, py, z_jaw0 - 0.5)).circle(CSK_D / 2 + 0.5)
-                       .workplane(offset=CSK_H + 0.5).circle(BOLT_D / 2 + 0.15).loft())
-        jaw = diff(jaw, csk)
-        body = diff(body, cyl_z(px, py, TAP_D, z_bot - 1, TAP_Z1))
-    print(f"jaw Z {z_jaw0:.2f}..{jaw.bounds[1][2]:.2f}; screws on post axes; M3x20 from Z={z_jaw0:.1f}: tip at {z_jaw0 + 20:.1f}, "
-          f"blind thread in shelf+post Z {z_bot:.1f}..{TAP_Z1}")
+        body = diff(body, cyl_z(px, py, SEAT_D, SEAT_Z, 10.0))                  # срезаем стержень, ровная площадка под головку
+        body = diff(body, cyl_z(px, py, BOLT_D, z_bot - 1, SEAT_Z + 1))         # проход Ø3,4 сквозь полку
+        jaw = diff(jaw, cyl_z(px, py, TAP_D, TAP_Z0, z_bot + 1))                # глухая резьба в губке
+    print(f"jaw Z {z_jaw0:.2f}..{jaw.bounds[1][2]:.2f}; screws from top on post axes; head seat Z={SEAT_Z}; "
+          f"M3x16: tip at Z={SEAT_Z - 16:.1f} (thread bottom {TAP_Z0})")
 
     region = box(JAW_X0 - 0.01, JAW_X1 + 0.01, y_jaw_in - 4, y_jaw_out + 3, z_jaw0 - 1, zc + 16)
     tbody, tjaw = inter(body, region), inter(jaw, region)
