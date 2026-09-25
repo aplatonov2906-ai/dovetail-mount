@@ -8,11 +8,11 @@ ref/proto_solid.stl, см. ref/solidify.py).
     (лицо 15, выступ 5,5) ложится после снятия ~0,7 мм с корня зуба и губы;
   - родная губка: скруглённый брусок; на его дне два конических гнезда под головки
     винтов, из верха торчат два стержня Ø4,2 (винты) — ровно под пазами боковой планки.
-Крепёж по исходнику: два винта М3×25 с потайной головкой (DIN 7991) СНИЗУ, головки в
-родных гнёздах на дне губки, стержни видны в зазоре между губкой и телом.
-Единственное добавление: над стержнями, под боковой планкой, у исходника пустота (в игре
-стержни висят в воздухе) — добавлены две втулки Ø9 с карманом под гайку М3 снизу, чтобы
-винтам было во что вкручиваться. Они в тени под планкой, не выходят за силуэт губки.
+Крепёж: два винта М3×35 с потайной головкой (DIN 7991) СНИЗУ, головки в родных гнёздах
+на дне губки, стержни исходника на губке оставлены. Винт вкручивается прямо в тело:
+в стенку и основание боковой планки над зазором (отверстие Ø2,5, резьбу нарезает сам винт).
+Стенка там 3,75 мм, поэтому ось винта сдвинута на 1,65 мм к стенке от оси родного стержня —
+иначе резьбе не во что врезаться. Ничего не добавлено.
 
 Выход: out/exact_body.stl, out/exact_jaw.stl, out/exact_test_body.stl, out/exact_test_jaw.stl,
        out/exact_assembly.stl — обе детали в сборе, только для просмотра.
@@ -35,9 +35,9 @@ JAW_X0, JAW_X1 = -19.0, 22.0          # родная губка оригинал
 JAW_GAP = 0.8                         # натяг: зазор губка/тело при затяжке
 BOLT_D = 3.4                          # отверстие под М3
 CSK_D, CSK_H = 6.4, 1.5               # потай под головку DIN 7991 М3 (Ø6) на дне губки
-NUT_AF, NUT_H = 5.7, 2.7              # карман под гайку М3 (5,5 по граням) во втулке, снизу
-COL_D, COL_Z0, COL_Z1 = 9.0, 7.0, 10.8   # втулки над стержнями, под боковой планкой
-POST_D = 4.24                         # родные стержни Ø4,2 — заменяются настоящими винтами
+TAP_D = 2.5                           # отверстие под резьбу М3 в теле (винт нарезает сам)
+SCREW_Y_IN = 0.3                      # ось винта: на столько внутрь от наружной грани стенки
+TAP_Z1 = 24.0                         # докуда идёт резьбовое отверстие в теле (система исходника)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "out")
@@ -106,32 +106,27 @@ def main():
     # 1. губка — родной брусок целиком: ниже низа тела + его скруглённый верх снаружи стенки (до стержней)
     jaw_region = union(box(JAW_X0 - 1.5, JAW_X1 + 1.5, y_jaw_in - 3, y_jaw_out + 2, z_bot - 30, z_bot),
                        box(JAW_X0 - 1.5, JAW_X1 + 1.5, y_out + 0.3, y_jaw_out + 2, z_bot - 0.1, 4.7))
+    for (px, py) in posts:                                                       # родные стержни — целиком к губке
+        jaw_region = union(jaw_region, cyl_z(px, py, 6.0, 4.6, 9.0))
     jaw = inter(solid, jaw_region)
     body = diff(solid, jaw_region)
-    # 2. родные стержни — это винты: убираем их из сетки (их место займут настоящие М3)
-    for (px, py) in posts:
-        post_cut = cyl_z(px, py, POST_D + 1.2, 4.0, 8.6)
-        body = diff(body, post_cut)
-        jaw = diff(jaw, post_cut)
     # 3. канал — от передка до заднего упора (упор — родной ограничитель, его не трогаем); натяг губки
     lug_x0 = 37.5
     body = diff(body, cutter(-70, lug_x0))
     jaw = diff(jaw, cutter(JAW_X0 - 2, JAW_X1 + 2))
     jaw = diff(jaw, box(JAW_X0 - 2, JAW_X1 + 2, y_jaw_in - 4, y_out + 0.3, z_bot - JAW_GAP, z_bot + 1))
-    # 4. втулки под гайки над стержнями (единственное добавление) + отверстия
+    # 4. винты снизу: по X — как родные стержни, по Y — у стенки, чтобы резьба сидела в теле
     z_jaw0 = jaw.bounds[0][2]
+    sy = y_out - SCREW_Y_IN
     for (px, py) in posts:
-        body = union(body, cyl_z(px, py, COL_D, COL_Z0, COL_Z1))
-        body = diff(body, cyl_z(px, py, BOLT_D, COL_Z0 - 1, COL_Z1 + 6))      # сквозь втулку, выходит в паз планки
-        hexp = cq_to_tm(cq.Workplane("XY", origin=(px, py, COL_Z0 - 0.1))
-                        .polygon(6, NUT_AF / math.cos(math.radians(30))).extrude(NUT_H + 0.1))
-        body = diff(body, hexp)                                                 # карман под гайку снизу втулки
-        jaw = diff(jaw, cyl_z(px, py, BOLT_D, z_jaw0 - 1, z_bot + 6))          # отверстие сквозь губку
-        csk = cq_to_tm(cq.Workplane("XY", origin=(px, py, z_jaw0 - 0.5)).circle(CSK_D / 2 + 0.5)
-                       .workplane(offset=CSK_H + 0.5).circle(BOLT_D / 2).loft())
+        jaw = diff(jaw, cyl_z(px, sy, BOLT_D, z_jaw0 - 1, 9.0))                # сквозь губку и её стержень
+        csk = cq_to_tm(cq.Workplane("XY", origin=(px, sy, z_jaw0 - 0.5)).circle(CSK_D / 2 + 0.5)
+                       .workplane(offset=CSK_H + 0.5).circle(BOLT_D / 2 + 0.15).loft())
         jaw = diff(jaw, csk)                                                    # потай под головку на дне
-    print(f"jaw Z {z_jaw0:.2f}..{jaw.bounds[1][2]:.2f}; screw M3x25 from Z={z_jaw0:.1f}: tip at {z_jaw0 + 25:.1f}, "
-          f"nut Z {COL_Z0:.1f}..{COL_Z0 + NUT_H:.1f}; visible shaft Z 4.4..{COL_Z0}")
+        body = diff(body, cyl_z(px, sy, BOLT_D, z_bot - 1, 4.4))               # проход через низ стенки рядом с губкой
+        body = diff(body, cyl_z(px, sy, TAP_D, 4.3, TAP_Z1))                   # резьбовое отверстие в стенке и основании планки
+    print(f"jaw Z {z_jaw0:.2f}..{jaw.bounds[1][2]:.2f}; screws at Y={sy:.2f} (posts at {posts[0][1]:.2f}); "
+          f"M3x35 from Z={z_jaw0:.1f}: tip at {z_jaw0 + 35:.1f}, thread in body Z 4.3..{TAP_Z1}")
 
     region = box(JAW_X0 - 0.01, JAW_X1 + 0.01, y_jaw_in - 4, y_jaw_out + 3, z_jaw0 - 1, zc + 16)
     tbody, tjaw = inter(body, region), inter(jaw, region)
@@ -149,7 +144,8 @@ def main():
         m = m.copy(); m.apply_transform(T); m.fix_normals()
         if name != "exact_assembly":                              # осколки булевых операций — выбросить
             m = max(m.split(only_watertight=False), key=lambda p: len(p.faces))
-            m.update_faces(m.nondegenerate_faces()); m.merge_vertices(); trimesh.repair.fill_holes(m); m.fix_normals()
+            m.update_faces(m.area_faces > 1e-7); m.update_faces(m.nondegenerate_faces()); m.merge_vertices()
+            trimesh.repair.fill_holes(m); m.fix_normals()
         if len(m.faces) > 250000:
             m = m.simplify_quadric_decimation(face_count=220000)
             m.update_faces(m.nondegenerate_faces()); m.merge_vertices()
