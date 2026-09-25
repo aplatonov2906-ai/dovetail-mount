@@ -8,10 +8,10 @@ ref/proto_solid.stl, см. ref/solidify.py). К форме ничего не д�
 (лицо 15, выступ 5,5) ложится в родной канал почти без реза: снимается ~0,7 мм
 с корня зуба и ~0,7 мм с корня губы, чтобы получить 15,5 (15 + зазор). Углы
 скосов — родные, с исходника (сверху ~22°, снизу ~16° от лица). Губка отделена по
-родному стыку, высота родная. Винты М4×14 (или ×16, кончик выйдет на 1,5 мм) сверху
-через родной мостик, гайки в губке.
+родному стыку, высота родная. Винты М4×10…14 сверху
+через родной мостик, гайки в шестигранных карманах сверху губки (скрыты под мостиком).
 
-Выход: out/exact_body.stl, out/exact_jaw.stl, out/exact_test_body.stl, out/exact_test_jaw.stl
+Выход: out/exact_assembly.stl — обе детали в сборе, только для просмотра; out/exact_body.stl, out/exact_jaw.stl, out/exact_test_body.stl, out/exact_test_jaw.stl
 Система координат выхода — как у mount.py: X вперёд, +Y — левая сторона (там планка), Z вверх,
 0 по Z = середина планки на коробке.
 """
@@ -110,15 +110,16 @@ def main():
     bolt_y = fl + 2.0 + nut_ac / 2
     jaw_xc = (JAW_X0 + JAW_X1) / 2
     z_jaw0 = jaw.bounds[0][2]
-    nut_z0 = z_jaw0 + 3.5
     for sx in (-1, 1):
         xc = jaw_xc + sx * BOLT_DX
         body = diff(body, cyl_z(xc, bolt_y, BOLT_D, z_bot - 1, z_boss + 1))
         body = diff(body, cyl_z(xc, bolt_y, HEAD_D, z_boss - HEAD_H, z_boss + 1))
         jaw = diff(jaw, cyl_z(xc, bolt_y, BOLT_D, z_jaw0 - 1, z_bot + 1))
-        jaw = diff(jaw, box(xc - NUT_AF / 2, xc + NUT_AF / 2, bolt_y - nut_ac / 2, y_boss + 3, nut_z0, nut_z0 + NUT_H))
+        # гайка — в шестигранный карман сверху губки (закрыт мостиком, снаружи не виден)
+        hexp = cq_to_tm(cq.Workplane("XY", origin=(xc, bolt_y, z_bot - NUT_H - 0.4)).polygon(6, nut_ac + 0.3).extrude(NUT_H + 2))
+        jaw = diff(jaw, hexp)
     print(f"bolt axis Y={bolt_y:.2f} (head edge {bolt_y + HEAD_D/2:.2f} vs boss {y_boss:.2f}); jaw Z {z_jaw0:.2f}..{z_bot:.2f} (native); "
-          f"bolt M4x14: tip at Z={z_boss - HEAD_H - 14:.1f}, nut Z {nut_z0:.1f}..{nut_z0 + NUT_H:.1f}")
+          f"nut pocket from jaw top, Z {z_bot - NUT_H - 0.4:.1f}..{z_bot:.1f}; bolt M4x10: tip Z={z_boss - HEAD_H - 10:.1f}")
 
     region = box(JAW_X0 - 0.01, JAW_X1 + 0.01, y_jaw_in - 4, y_boss + 3, z_jaw0 - 1, zc + 16)
     tbody, tjaw = inter(body, region), inter(jaw, region)
@@ -130,13 +131,14 @@ def main():
     T = np.array([[-1, 0, 0, x_rear], [0, 1, 0, dy], [0, 0, 1, -zc], [0, 0, 0, 1]], dtype=float)
     os.makedirs(OUT, exist_ok=True)
     np.savetxt(os.path.join(OUT, "exact_transform.txt"), T)
-    for name, m in (("exact_body", body), ("exact_jaw", jaw), ("exact_test_body", tbody), ("exact_test_jaw", tjaw)):
+    asm = trimesh.util.concatenate([body, jaw])
+    for name, m in (("exact_body", body), ("exact_jaw", jaw), ("exact_test_body", tbody), ("exact_test_jaw", tjaw), ("exact_assembly", asm)):
         m = m.copy(); m.apply_transform(T); m.fix_normals()
         if len(m.faces) > 250000:
             m = m.simplify_quadric_decimation(face_count=220000)
             m.update_faces(m.nondegenerate_faces()); m.merge_vertices()
             trimesh.repair.fill_holes(m); m.fix_normals()
-            assert m.is_watertight, name
+            assert m.is_watertight or name == "exact_assembly", name
         m.export(os.path.join(OUT, name + ".stl"))
         b = m.bounds
         print(f"{name}: wt={m.is_watertight} faces={len(m.faces)} vol={m.volume/1000:.1f} cm3 "
