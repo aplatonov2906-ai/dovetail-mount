@@ -2,6 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>Кронштейн 3D</title>
 <style>
   html,body{margin:0;height:100%;background:#1c1f24;color:#ddd;font:14px system-ui,sans-serif;overflow:hidden}
@@ -16,7 +17,7 @@
 <body>
 <div id="ui">
   <b>dovetail-mount</b><br>
-  <label>версия: <select id="ver"><option value="exact">точная копия из игры (в коробку!)</option><option value="mount" selected>удлинённая (проходит над крышкой)</option></select></label>
+  <label>версия: <select id="ver"><option value="exact" selected>точная копия из игры (в коробку!)</option><option value="mount">удлинённая (проходит над крышкой)</option></select></label>
   <label><input type="checkbox" id="cbBody" checked> тело (серое)</label>
   <label><input type="checkbox" id="cbJaw" checked> губка (оранжевая)</label>
   <label><input type="checkbox" id="cbRecv" checked> коробка + полоска (полупрозрачно)</label>
@@ -87,7 +88,7 @@ const V='?v='+Date.now();
 function loadVer(p){for(const k of Object.keys(parts)){scene.remove(parts[k]);delete parts[k];}document.getElementById('dims').innerHTML='';
   add('body','out/'+p+'_body.stl'+V,mats.body);add('jaw','out/'+p+'_jaw.stl'+V,mats.jaw);}
 document.getElementById('ver').onchange=e=>loadVer(e.target.value);
-loadVer('mount');
+loadVer('exact');
 
 // условная ствольная коробка с полоской (по параметрам модели)
 const RECV=new THREE.Group();
