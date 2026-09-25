@@ -16,6 +16,7 @@
 <body>
 <div id="ui">
   <b>dovetail-mount</b><br>
+  <label>версия: <select id="ver"><option value="exact">точная копия из игры (в коробку!)</option><option value="mount" selected>удлинённая (проходит над крышкой)</option></select></label>
   <label><input type="checkbox" id="cbBody" checked> тело (серое)</label>
   <label><input type="checkbox" id="cbJaw" checked> губка (оранжевая)</label>
   <label><input type="checkbox" id="cbRecv" checked> коробка + полоска (полупрозрачно)</label>
@@ -81,10 +82,12 @@ let jawMesh=null;
 function add(name,url,mat){loader.load(url,g=>{g.computeVertexNormals();const m=new THREE.Mesh(g,mat);m.name=name;parts[name]=m;scene.add(m);
   if(name==='jaw')jawMesh=m;g.computeBoundingBox();const b=g.boundingBox;
   document.getElementById('dims').innerHTML+=`${name}: ${(b.max.x-b.min.x).toFixed(0)}×${(b.max.y-b.min.y).toFixed(0)}×${(b.max.z-b.min.z).toFixed(0)} мм<br>`;
-  if(name==='body')setView('iso');});}
+  if(name==='body'&&!window._viewed){window._viewed=1;setView('iso');}});}
 const V='?v='+Date.now();
-add('body','out/mount_body.stl'+V,mats.body);
-add('jaw','out/mount_jaw.stl'+V,mats.jaw);
+function loadVer(p){for(const k of Object.keys(parts)){scene.remove(parts[k]);delete parts[k];}document.getElementById('dims').innerHTML='';
+  add('body','out/'+p+'_body.stl'+V,mats.body);add('jaw','out/'+p+'_jaw.stl'+V,mats.jaw);}
+document.getElementById('ver').onchange=e=>loadVer(e.target.value);
+loadVer('mount');
 
 // условная ствольная коробка с полоской (по параметрам модели)
 const RECV=new THREE.Group();
