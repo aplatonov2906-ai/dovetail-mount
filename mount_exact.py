@@ -7,8 +7,9 @@ ref/proto_solid.stl, см. ref/solidify.py). Форма не перерисов�
 Правки относительно оригинала (только в зоне зажима):
   - полоса вдоль низа (Z −6,5…+1) и утолщение снаружи под боковой планкой
     (до Z 12) — иначе за пазом глубиной 5,75 не остаётся стенки (у оригинала 5 мм);
-  - в зоне губки мостик выступает наружу на 13,5 вместо 9,5 — под гайки М4;
-  - болты М4×20 снизу через губку в гайки, гайки вставляются сбоку в пазы.
+  - в зоне губки мостик выступает наружу на 15 вместо 9,5 — чтобы ключ проходил мимо боковой планки;
+  - как у оригинала: два винта М4×20 сверху через мостик (головки в цековках на мостике),
+    гайки в губке, вставляются сбоку в пазы.
 
 Выход: out/exact_body.stl, out/exact_jaw.stl, out/exact_test_body.stl, out/exact_test_jaw.stl
 Система координат выхода — как у mount.py: X вперёд, +Y — левая сторона (там планка), Z вверх,
@@ -29,10 +30,10 @@ JAW_X0, JAW_X1 = -19.0, 22.0          # губка как у оригинала
 JAW_H, JAW_GAP = 14.0, 0.8
 STRIP_X0, STRIP_X1 = -57.0, 41.0      # полоса вдоль низа: от передка до упора
 PAD_TOP = 12.0                        # утолщение снаружи до низа боковой планки
-BOSS_OUT_Y, BOSS_TOP = 13.5, 5.0      # мостик в зоне губки
+BOSS_OUT_Y, BOSS_TOP = 15.0, 5.0      # мостик в зоне губки (шире оригинала на 5,5 — под ключ и гайки)
 BOLT_DX, BOLT_D = 13.0, 4.4
 HEAD_D, HEAD_H = 8.0, 4.5
-NUT_AF, NUT_H, NUT_Z0 = 7.2, 3.4, 0.0
+NUT_AF, NUT_H = 7.2, 3.4
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "out")
@@ -93,25 +94,26 @@ def main():
     body = union(body, box(JAW_X0, JAW_X1, y_out - 0.3, BOSS_OUT_Y, BODY_Z0, BOSS_TOP))
     # 4. паз под планку — во всю длину
     body = diff(body, dovetail_cutter(y_in, -70, 90))
-    # 5. болты: отверстия снизу, пазы под гайки сбоку снаружи
-    bolt_y = y_in + DT_DEPTH + DT_CLEAR + 2.0 + NUT_AF / math.cos(math.radians(30)) / 2
+    # 5. винты сверху, как у оригинала: цековка под головку на мостике + сквозное отверстие
+    bolt_y = y_out + 4.3 + 2.0    # ось снаружи от боковой планки — ключ проходит сверху
     jaw_xc = (JAW_X0 + JAW_X1) / 2
     for sx in (-1, 1):
         xc = jaw_xc + sx * BOLT_DX
-        body = diff(body, cyl_z(xc, bolt_y, BOLT_D, BODY_Z0 - 1, BOSS_TOP - 0.8))
-        nut_ac = NUT_AF / math.cos(math.radians(30))
-        body = diff(body, box(xc - NUT_AF / 2, xc + NUT_AF / 2, bolt_y - nut_ac / 2, BOSS_OUT_Y + 1, NUT_Z0, NUT_Z0 + NUT_H))
-    print(f"bolt axis Y={bolt_y:.2f} (channel floor at {y_in + DT_DEPTH + DT_CLEAR:.2f})")
+        body = diff(body, cyl_z(xc, bolt_y, BOLT_D, BODY_Z0 - 1, BOSS_TOP + 1))
+        body = diff(body, cyl_z(xc, bolt_y, HEAD_D, BOSS_TOP - HEAD_H, BOSS_TOP + 1))
+    print(f"bolt axis Y={bolt_y:.2f} (channel floor at {y_in + DT_DEPTH + DT_CLEAR:.2f}, boss to {BOSS_OUT_Y})")
 
     # губка
     z0 = BODY_Z0 - JAW_H
     jaw = box(JAW_X0, JAW_X1, y_in, BOSS_OUT_Y, z0, BODY_Z0)
     jaw = diff(jaw, dovetail_cutter(y_in, JAW_X0 - 1, JAW_X1 + 1))
     jaw = diff(jaw, box(JAW_X0 - 1, JAW_X1 + 1, y_in - 1, BOSS_OUT_Y + 1, BODY_Z0 - JAW_GAP, BODY_Z0 + 1))
+    nut_ac = NUT_AF / math.cos(math.radians(30))
+    nut_z0 = z0 + 3.5
     for sx in (-1, 1):
         xc = jaw_xc + sx * BOLT_DX
         jaw = diff(jaw, cyl_z(xc, bolt_y, BOLT_D, z0 - 1, BODY_Z0 + 1))
-        jaw = diff(jaw, cyl_z(xc, bolt_y, HEAD_D, z0 - 1, z0 + HEAD_H))
+        jaw = diff(jaw, box(xc - NUT_AF / 2, xc + NUT_AF / 2, bolt_y - nut_ac / 2, BOSS_OUT_Y + 1, nut_z0, nut_z0 + NUT_H))
 
     # тест посадки: зона губки
     region = box(JAW_X0 - 0.01, JAW_X1 + 0.01, y_in - 1, BOSS_OUT_Y + 1, z0 - 1, PAD_TOP + 2)
